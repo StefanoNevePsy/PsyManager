@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import PWAUpdatePrompt from '@/components/PWAUpdatePrompt'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import PatientsPage from '@/pages/PatientsPage'
@@ -40,6 +41,7 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PWAUpdatePrompt />
       <Router basename={basename}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

@@ -2,225 +2,220 @@
 
 ## Project Overview
 
-PsyManager è un gestionale completo e gratuito per psicologi e terapeuti. È una Progressive Web App (PWA) costruita con React e TypeScript che funziona su PC, tablet e mobile Android via Capacitor.
+PsyManager è un gestionale completo e gratuito per psicologi e terapeuti. Progressive Web App (PWA) costruita con React + TypeScript, con build nativo Android via Capacitor.
 
-## Architecture
+## Branch Strategy
 
-### Frontend Stack
-- **Framework**: React 19 + TypeScript + Vite
-- **UI Framework**: Tailwind CSS
-- **Icons**: Lucide React
-- **Routing**: React Router DOM
-- **State Management**: Zustand + React Query
+- `main`: produzione, deploy automatico su GitHub Pages
+- `develop`: sviluppo attivo, feature branch da merger qui
+- `claude/*`: branch generati da AI per feature/fix specifici
+
+## Tech Stack
+
+### Frontend
+- **Framework**: React 19 + TypeScript + Vite 8
+- **UI**: Tailwind CSS 3 + Lucide React icons
+- **Routing**: React Router DOM 7
+- **State**: Zustand (global) + TanStack Query (server)
 - **Forms**: React Hook Form + Zod
-- **Mobile**: Capacitor (Android/iOS)
+- **Date utilities**: date-fns con locale italiano
+- **PWA**: vite-plugin-pwa con Workbox
 
-### Backend Stack
-- **Database**: Supabase (PostgreSQL)
-- **Auth**: Supabase Auth (Email/Password)
-- **API**: REST via Supabase
-- **External APIs**: Google Calendar API
+### Backend
+- **Database**: Supabase PostgreSQL
+- **Auth**: Supabase Auth (email/password)
+- **API**: Supabase REST/Realtime
+- **External**: Google Calendar API (OAuth 2.0 client-side)
+
+### Mobile
+- **Framework**: Capacitor 8
+- **Plugins**: @capacitor/app, @capacitor/splash-screen
 
 ### Deployment
-- **Frontend**: GitHub Pages (static hosting)
-- **Backend**: Supabase Cloud (serverless)
-- **Mobile**: Capacitor → Android APK
+- **Web**: GitHub Pages (basename `/PsyManager/`)
+- **Android**: APK/AAB via Capacitor + Android Studio
 
 ## Project Structure
 
 ```
 src/
 ├── components/
-│   ├── Header.tsx          # Top navigation bar with theme toggle
-│   ├── Sidebar.tsx         # Left navigation menu
-│   └── Layout.tsx          # Main layout wrapper
+│   ├── ui/                    # Componenti base: Button, Input, Modal, Card, Select, Textarea, EmptyState, PageHeader, ConfirmDialog
+│   ├── patients/              # PatientForm
+│   ├── service-types/         # ServiceTypeForm
+│   ├── structures/            # StructureForm, PackageAgreementForm
+│   ├── sessions/              # SessionForm, CalendarView, SessionsList, GoogleCalendarSync
+│   ├── payments/              # PaymentForm
+│   ├── Header.tsx             # Top bar con tema toggle e dropdown utente
+│   ├── Sidebar.tsx            # Nav laterale (responsive)
+│   ├── Layout.tsx             # Wrapper principale
+│   ├── ProtectedRoute.tsx     # HOC per route autenticate
+│   └── PWAUpdatePrompt.tsx    # Notifica aggiornamento PWA
 ├── pages/
-│   ├── LoginPage.tsx       # Authentication page
-│   ├── DashboardPage.tsx   # Main dashboard with stats
-│   ├── PatientsPage.tsx    # Patient management
-│   ├── SessionsPage.tsx    # Session calendar
-│   ├── PaymentsPage.tsx    # Payment tracking
-│   ├── ReportsPage.tsx     # Analytics and reports
-│   └── SettingsPage.tsx    # User settings
+│   ├── LoginPage.tsx          # Login/Signup/Reset password
+│   ├── DashboardPage.tsx      # Stats + sedute oggi/prossime + pagamenti recenti
+│   ├── PatientsPage.tsx       # CRUD pazienti
+│   ├── SessionsPage.tsx       # Calendario + lista sedute + Google sync
+│   ├── ServiceTypesPage.tsx   # CRUD tipi prestazione
+│   ├── StructuresPage.tsx     # CRUD strutture + pacchetti
+│   ├── PaymentsPage.tsx       # CRUD pagamenti + saldi pazienti
+│   ├── ReportsPage.tsx        # Report con filtri e export CSV
+│   └── SettingsPage.tsx       # Profilo, Google Calendar, sicurezza
 ├── hooks/
-│   └── useTheme.ts         # Theme management hook
+│   ├── useAuth.ts             # Wrapper authStore
+│   ├── useTheme.ts            # Toggle tema
+│   ├── usePatients.ts         # CRUD via React Query
+│   ├── useServiceTypes.ts
+│   ├── useStructures.ts       # Strutture + pacchetti
+│   ├── useSessions.ts
+│   ├── usePayments.ts         # Pagamenti + balances
+│   ├── useDashboardStats.ts   # KPI dashboard
+│   ├── useReports.ts          # Aggregazioni per report + CSV export
+│   └── useGoogleCalendarSync.ts  # Sync bidirezionale
+├── stores/
+│   ├── authStore.ts           # User, session, signIn/signUp/signOut
+│   └── googleCalendarStore.ts # OAuth token + connect/disconnect
 ├── lib/
-│   ├── supabase.ts         # Supabase client initialization
-│   └── themes.ts           # Theme definitions (extensible)
+│   ├── supabase.ts            # Client Supabase
+│   ├── googleCalendar.ts      # API wrapper Google Calendar
+│   ├── schemas.ts             # Zod schemas (validazione form)
+│   └── themes.ts              # Definizione temi (estensibile)
 ├── types/
-│   ├── database.ts         # Database type definitions
-│   └── theme.ts            # Theme type definitions
-├── stores/                 # Zustand stores (to be implemented)
-├── utils/                  # Utility functions
+│   ├── database.ts            # Types tabelle DB (manuali)
+│   └── theme.ts
 ├── styles/
-│   └── globals.css         # Global styles with CSS variables
-└── App.tsx                 # Main app component with routing
-
-public/                      # Static assets
-.github/workflows/
-└── deploy.yml              # GitHub Actions CI/CD
+│   └── globals.css            # Tailwind directives + CSS variables tema
+├── App.tsx                    # Routing + providers
+├── main.tsx                   # Entry point
+└── vite-env.d.ts              # ImportMetaEnv types
 ```
 
 ## Key Design Decisions
 
-### 1. Theme System
-- **Approach**: CSS variables with class-based switching
-- **Extensibility**: Easy to add new themes by defining them in `src/lib/themes.ts`
-- **Currently Supported**: Light and Dark modes
-- **Future**: Themes can include multiple color schemes, high contrast modes, etc.
+### 1. Tema (CSS Variables, classes)
+- Light/dark via `dark` class su root + `<html>` toggle
+- CSS variables per ogni colore (background, foreground, primary, etc.)
+- **Aggiungere nuovo tema**: aggiungi entry in `src/lib/themes.ts` + classe in `globals.css`
 
-### 2. Database Design
-- **Multi-tenancy**: Each user owns all their data via RLS (Row Level Security)
-- **Type Safety**: Full TypeScript types generated from database schema
-- **Service Types**: Flexible "service_types" table allows users to create custom therapy types
-- **Sessions**: Linked to patients and service types for complete tracking
-- **Payments**: Supports both direct patient payments and package deals with structures
+### 2. Database (Supabase)
+- **Multi-tenancy**: `user_id` foreign key + RLS policies (`auth.uid() = user_id`)
+- **Tabelle**: users, patients, service_types, sessions, structures, package_agreements, payments
+- **Indici**: su `user_id`, foreign keys, e date di scheduling/payment
+- **Triggers**: auto-update `updated_at` su ogni update
+- **Types**: in `src/types/database.ts` (sincronizzati a mano col SQL)
 
 ### 3. Google Calendar Sync
-- **Bidirectional**: Changes in app sync to Calendar and vice versa
-- **Storage**: Uses `extendedProperties` to store metadata without modifying event titles
-- **Conflict Resolution**: Latest update wins (can be refined later)
+- **Auth**: OAuth 2.0 client-side via Google Identity Services
+- **Token**: salvato in localStorage (scadenza ~1h)
+- **Mapping**: `sessions.google_calendar_event_id` collega seduta locale a evento Calendar
+- **Strategia**:
+  - Sedute create in app → push su Calendar via `pushSessionToCalendar`
+  - Eventi Calendar non collegati → mostrati come `unmappedEvents` (importazione manuale)
+  - Modifiche orario su Calendar → pulled da `fullSync`
+- **Tag eventi**: `extendedProperties.private` con `appId: 'psymanager'`, `sessionId`, `patientId`, `serviceTypeId`
 
-### 4. Authentication Flow
-- Supabase handles email verification and password management
-- OAuth 2.0 for Google Calendar integration
-- 2FA support available but optional
+### 4. Forms
+- React Hook Form + Zod resolver
+- Schemi centralizzati in `src/lib/schemas.ts`
+- Pattern: form component generic con `initialData`, `onSubmit`, `onCancel`, `loading`
+
+### 5. Caching (TanStack Query)
+- `staleTime: 5min`, `retry: 1`
+- Query keys: `['entityName', userId]` o `['entityName', userId, filters]`
+- Mutations invalidano le query correlate
 
 ## Development Workflow
 
-### Starting the Dev Server
 ```bash
-npm run dev
-```
-Opens on `http://localhost:3000`
+npm run dev          # Dev server (port 3000)
+npm run build        # Production build
+npm run type-check   # TypeScript check
+npm run preview      # Preview production build
 
-### Building for Production
-```bash
-npm run build
-```
-Creates optimized bundle in `dist/`
-
-### Type Checking
-```bash
-npm run type-check
+# Capacitor
+npm run cap:add:android  # Add Android platform (first time)
+npm run cap:sync         # Build web + sync to native
+npm run cap:open:android # Open in Android Studio
 ```
 
-### Deploying to GitHub Pages
-```bash
-# Manual deployment
-npm run build
-# Files from dist/ are automatically deployed via GitHub Actions on push to main
-```
+## Adding New Features
 
-### Building for Android
-```bash
-npm install @capacitor/core @capacitor/cli
-npx cap init    # First time only
-npx cap add android
-npm run build
-npx cap copy
-npx cap open android  # Opens Android Studio
-```
+### Add a new database table
 
-## Database Setup (Supabase)
+1. Aggiungi SQL in `database.sql` (CREATE TABLE + RLS + indexes + triggers)
+2. Esegui in Supabase SQL Editor
+3. Aggiungi types in `src/types/database.ts`
+4. Crea hook in `src/hooks/useXxx.ts` con React Query
+5. Crea schema Zod in `src/lib/schemas.ts`
+6. Crea form component in `src/components/xxx/XxxForm.tsx`
+7. Crea page in `src/pages/XxxPage.tsx`
+8. Aggiungi route in `src/App.tsx`
+9. Aggiungi voce in `src/components/Sidebar.tsx`
 
-1. Create a Supabase project at https://app.supabase.com
-2. Copy the SQL schema from `database.sql` into Supabase SQL Editor
-3. Enable Google OAuth provider in Authentication settings
-4. Set environment variables in `.env.local`:
-   ```
-   VITE_SUPABASE_URL=https://your-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-key
-   VITE_GOOGLE_CLIENT_ID=your-client-id
-   VITE_GOOGLE_CALENDAR_API_KEY=your-api-key
-   ```
+### Add a new theme
 
-## Component Guidelines
+1. Aggiungi colors in `src/styles/globals.css` con classe (es. `.theme-ocean`)
+2. Aggiungi entry in `src/lib/themes.ts`
+3. Aggiorna `src/hooks/useTheme.ts` per supportare la nuova classe
 
-### Creating New Pages
-1. Create file in `src/pages/[FeatureName]Page.tsx`
-2. Export default React component
-3. Use layout from `Layout.tsx` (auto-included)
-4. Follow existing pattern for consistency
+## Coding Conventions
 
-### Creating New Components
-1. Create file in `src/components/[ComponentName].tsx`
-2. Use TypeScript with proper prop types
-3. Import icons from `lucide-react`
-4. Use Tailwind classes for styling
-5. Example:
-   ```tsx
-   import { Plus } from 'lucide-react'
-   
-   interface Props {
-     label: string
-     onClick: () => void
-   }
-   
-   export default function Button({ label, onClick }: Props) {
-     return (
-       <button 
-         onClick={onClick}
-         className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90"
-       >
-         <Plus className="w-5 h-5 mr-2 inline" />
-         {label}
-       </button>
-     )
-   }
-   ```
+- **Components**: PascalCase, default export
+- **Hooks**: `use` prefix, named export
+- **Types**: PascalCase, interface preferito a type
+- **CSS**: Tailwind classes, evita `style={}` inline
+- **Imports**: alias `@/` per src; ordine: external → internal → types
+- **Lingua UI**: italiano
+- **Lingua codice/commenti**: inglese
 
-## Styling Guidelines
+## Common Pitfalls
 
-- Use Tailwind CSS utility classes
-- For theme colors, use CSS variables defined in `src/styles/globals.css`
-- Avoid inline styles
-- Responsive design: use `md:`, `lg:` breakpoints
-- Color precedence: Use semantic colors (primary, secondary, etc.) over raw colors
+- ⚠️ **`--legacy-peer-deps`** necessario per Tailwind 3 + altri pacchetti recenti
+- ⚠️ **PWA in dev**: disabilitato; testare con `npm run preview`
+- ⚠️ **Supabase types**: il client usa `any` (non `Database` generic) per evitare conflitti TypeScript con versioni recenti
+- ⚠️ **GitHub Pages routing**: `basename: '/PsyManager'` solo in production; `404.html` redirect per SPA
+- ⚠️ **Capacitor Android scheme**: `https` (non `http`) per evitare blocchi Mixed Content
+- ⚠️ **Google OAuth redirect**: deve combaciare esattamente con quello in Google Cloud Console
 
-## State Management
+## Database Setup Quick Reference
 
-### When to Use What
-- **React State**: Component-local state, forms
-- **Zustand**: Global app state, user preferences, theme
-- **React Query**: Server state, API data caching
-- **localStorage**: Persistent client data (theme preference)
+Vedi `database.sql` per lo schema completo. Riassunto tabelle:
 
-## Next Steps / TODO
+| Tabella | Descrizione | Chiavi |
+|---------|-------------|--------|
+| `users` | Profili utenti (collegati a auth.users) | id (FK auth.users) |
+| `patients` | Anagrafe pazienti | user_id |
+| `service_types` | Tipi prestazione (private/package) | user_id |
+| `sessions` | Sedute terapia | user_id, patient_id, service_type_id |
+| `structures` | Strutture/centri | user_id |
+| `package_agreements` | Accordi forfait | user_id, structure_id |
+| `payments` | Pagamenti registrati | user_id, patient_id, session_id |
 
-- [ ] Implement Supabase authentication (login/signup)
-- [ ] Create patient management CRUD
-- [ ] Implement service type customization
-- [ ] Build calendar view with date selection
-- [ ] Add Google Calendar OAuth flow
-- [ ] Implement payment tracking
-- [ ] Create report generation
-- [ ] Add offline support (service workers)
-- [ ] Build Capacitor Android app
-- [ ] Setup PWA manifest
+Tutti hanno `created_at`, `updated_at`, RLS attivo.
 
-## Important Notes
+## Environment Variables
 
-- **Security**: Supabase RLS policies ensure users can only access their own data
-- **Performance**: React Query handles caching; avoid unnecessary re-renders
-- **Mobile**: Keep components responsive and touch-friendly
-- **Accessibility**: Use semantic HTML, proper ARIA labels
-- **Git**: Use feature branches, meaningful commit messages
+Vedi `.env.example` per il template. Loca in `.env.local` (gitignored).
 
-## Testing
+In produzione, configura come **GitHub Secrets** per il workflow CI/CD.
 
-TODO: Set up testing framework (Jest + React Testing Library)
+## Testing Strategy
 
-## Deployment Checklist
+🚧 **TODO**: Setup Vitest + React Testing Library
 
-- [ ] Set all environment variables in GitHub repo secrets
-- [ ] Update `homepage` in package.json for correct base path
-- [ ] Configure custom domain (optional)
-- [ ] Setup email verification in Supabase
-- [ ] Test on actual mobile devices
-- [ ] Setup analytics (optional)
-- [ ] Privacy policy and terms of service
+Suggerimento iniziale:
+- Unit test per `src/lib/schemas.ts` (Zod schemas)
+- Component test per form (mock React Query)
+- Integration test per i flow critici (login, create patient)
+
+## Resources
+
+- [Supabase Docs](https://supabase.com/docs)
+- [Google Calendar API](https://developers.google.com/calendar/api/v3/reference)
+- [Capacitor Docs](https://capacitorjs.com/docs)
+- [Tailwind CSS](https://tailwindcss.com/docs)
+- [TanStack Query](https://tanstack.com/query/latest)
 
 ---
 
-For questions or clarifications, refer to README.md or create an issue on GitHub.
+In caso di dubbi, apri una issue su GitHub.

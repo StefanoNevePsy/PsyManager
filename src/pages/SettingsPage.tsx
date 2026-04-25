@@ -1,112 +1,167 @@
-import { Save } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Save, Calendar, Shield, User } from 'lucide-react'
+import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
+import { useAuth } from '@/hooks/useAuth'
+import { Button, Card, Input, PageHeader } from '@/components/ui'
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
-    googleCalendarConnected: false,
-    twoFactorEnabled: false,
+  const { user } = useAuth()
+  const {
+    initialize,
+    connect,
+    disconnect,
+    isConnected,
+    loading,
+    error,
+    initialized,
+  } = useGoogleCalendarStore()
+  const [profileData, setProfileData] = useState({
+    fullName: '',
+    email: user?.email || '',
   })
 
-  const handleSave = () => {
-    // TODO: Save settings
-  }
+  useEffect(() => {
+    if (!initialized) {
+      initialize()
+    }
+  }, [initialized, initialize])
 
   return (
-    <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Impostazioni</h1>
-        <p className="text-muted-foreground">
-          Configura i tuoi parametri e le integrazioni
-        </p>
-      </div>
+    <div className="p-4 md:p-8 space-y-6 max-w-3xl">
+      <PageHeader
+        title="Impostazioni"
+        description="Configura il tuo profilo e le integrazioni"
+      />
 
-      <div className="space-y-6">
-        {/* Google Calendar */}
-        <div className="bg-card rounded-lg border border-border p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
+      {/* Profile Settings */}
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <User className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold text-foreground">Profilo</h2>
+        </div>
+
+        <div className="space-y-4">
+          <Input
+            label="Email"
+            type="email"
+            value={profileData.email}
+            disabled
+          />
+
+          <Input
+            label="Nome Completo"
+            type="text"
+            value={profileData.fullName}
+            onChange={(e) =>
+              setProfileData({ ...profileData, fullName: e.target.value })
+            }
+            placeholder="Dr. Mario Rossi"
+          />
+
+          <div className="flex justify-end">
+            <Button>
+              <Save className="w-4 h-4" />
+              Salva Profilo
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Google Calendar Integration */}
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold text-foreground">
             Integrazione Google Calendar
           </h2>
-          <p className="text-muted-foreground mb-4">
-            Sincronizza le tue sedute con Google Calendar
-          </p>
-          <button className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:opacity-90">
-            {settings.googleCalendarConnected ? 'Disconnetti' : 'Connetti'}
-          </button>
         </div>
 
-        {/* Profile Settings */}
-        <div className="bg-card rounded-lg border border-border p-6 space-y-4">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
-            Profilo
-          </h2>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Sincronizza automaticamente le tue sedute con Google Calendar. Le
+          modifiche fatte in PsyManager si rifletteranno sul Calendar e viceversa.
+        </p>
 
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="your@email.com"
-            />
+        {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+          <div className="bg-orange-500/10 text-orange-600 dark:text-orange-400 p-3 rounded-lg text-sm mb-4">
+            ⚠️ Google Client ID non configurato. Configura{' '}
+            <code className="bg-orange-500/20 px-1 rounded">
+              VITE_GOOGLE_CLIENT_ID
+            </code>{' '}
+            nel file .env per abilitare l'integrazione.
           </div>
+        )}
 
-          <div>
-            <label className="block text-sm font-medium text-card-foreground mb-2">
-              Nome Completo
-            </label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Nome Cognome"
-            />
+        {error && (
+          <div className="bg-destructive/10 text-destructive p-3 rounded-lg text-sm mb-4">
+            {error}
           </div>
-        </div>
+        )}
 
-        {/* Security Settings */}
-        <div className="bg-card rounded-lg border border-border p-6 space-y-4">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
-            Sicurezza
-          </h2>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-card-foreground">
-                Autenticazione a Due Fattori
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Aumenta la sicurezza del tuo account
-              </p>
-            </div>
-            <button
-              onClick={() =>
-                setSettings({
-                  ...settings,
-                  twoFactorEnabled: !settings.twoFactorEnabled,
-                })
-              }
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                settings.twoFactorEnabled
-                  ? 'bg-green-500/20 text-green-600'
-                  : 'bg-secondary text-foreground hover:bg-secondary/80'
-              }`}
+        <div className="flex items-center gap-3 flex-wrap">
+          {isConnected() ? (
+            <>
+              <span className="bg-green-500/10 text-green-600 dark:text-green-400 px-3 py-1.5 rounded-full text-sm font-medium">
+                ✓ Connesso
+              </span>
+              <Button variant="outline" onClick={disconnect}>
+                Disconnetti
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={connect}
+              loading={loading}
+              disabled={!import.meta.env.VITE_GOOGLE_CLIENT_ID}
             >
-              {settings.twoFactorEnabled ? 'Abilitata' : 'Disabilitata'}
-            </button>
-          </div>
+              <Calendar className="w-4 h-4" />
+              Connetti Google Calendar
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {/* Security Settings */}
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <Shield className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-xl font-semibold text-foreground">Sicurezza</h2>
         </div>
 
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            className="bg-primary text-primary-foreground px-6 py-2 rounded-lg hover:opacity-90 flex items-center gap-2"
-          >
-            <Save className="w-5 h-5" />
-            Salva Impostazioni
-          </button>
+        <div className="space-y-4">
+          <div>
+            <p className="font-medium text-foreground mb-1">Cambia Password</p>
+            <p className="text-sm text-muted-foreground mb-3">
+              Modifica la password del tuo account
+            </p>
+            <Button variant="outline" size="sm">
+              Cambia Password
+            </Button>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="font-medium text-foreground mb-1">
+              Autenticazione a Due Fattori
+            </p>
+            <p className="text-sm text-muted-foreground mb-3">
+              Aggiungi un livello extra di sicurezza al tuo account (in arrivo)
+            </p>
+            <Button variant="outline" size="sm" disabled>
+              Configura 2FA
+            </Button>
+          </div>
         </div>
-      </div>
+      </Card>
+
+      {/* About */}
+      <Card>
+        <h2 className="text-xl font-semibold text-foreground mb-2">
+          Informazioni
+        </h2>
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>PsyManager v1.0.0</p>
+          <p>Gestionale gratuito per psicologi e terapeuti</p>
+        </div>
+      </Card>
     </div>
   )
 }

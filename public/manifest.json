@@ -1,0 +1,57 @@
+{
+  "name": "PsyManager",
+  "short_name": "PsyManager",
+  "description": "Gestionale completo per psicologi e terapeuti",
+  "start_url": "/PsyManager/",
+  "scope": "/PsyManager/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23007AFF' width='192' height='192'/><text x='50%' y='50%' font-size='120' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='middle'>PM</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%23007AFF' width='512' height='512'/><text x='50%' y='50%' font-size='300' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='middle'>PM</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 720'><rect fill='%23f5f5f5' width='540' height='720'/><text x='50%' y='50%' font-size='48' font-weight='bold' text-anchor='middle' dominant-baseline='middle'>PsyManager</text></svg>",
+      "sizes": "540x720",
+      "type": "image/svg+xml",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "Pazienti",
+      "short_name": "Pazienti",
+      "description": "Visualizza la lista dei pazienti",
+      "url": "/PsyManager/?/patients",
+      "icons": []
+    },
+    {
+      "name": "Sedute",
+      "short_name": "Sedute",
+      "description": "Visualizza il calendario delle sedute",
+      "url": "/PsyManager/?/sessions",
+      "icons": []
+    },
+    {
+      "name": "Pagamenti",
+      "short_name": "Pagamenti",
+      "description": "Registra un nuovo pagamento",
+      "url": "/PsyManager/?/payments",
+      "icons": []
+    }
+  ]
+}

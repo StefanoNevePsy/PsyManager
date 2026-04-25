@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    /* Light theme */
+    --color-background: 0 0% 100%;
+    --color-foreground: 0 0% 3.6%;
+    --color-border: 0 0% 89.8%;
+    --color-input: 0 0% 89.8%;
+    --color-ring: 210 40% 96%;
+    --color-primary: 210 40% 50%;
+    --color-primary-foreground: 210 40% 98%;
+    --color-secondary: 210 14% 97%;
+    --color-secondary-foreground: 210 40% 50%;
+    --color-destructive: 0 84% 60%;
+    --color-destructive-foreground: 210 40% 98%;
+    --color-muted: 210 14% 97%;
+    --color-muted-foreground: 210 11% 36%;
+    --color-accent: 210 40% 50%;
+    --color-accent-foreground: 210 40% 98%;
+    --color-popover: 0 0% 100%;
+    --color-popover-foreground: 0 0% 3.6%;
+    --color-card: 0 0% 100%;
+    --color-card-foreground: 0 0% 3.6%;
+  }
+
+  .dark {
+    --color-background: 217 33% 17%;
+    --color-foreground: 210 40% 96%;
+    --color-border: 217 33% 27%;
+    --color-input: 217 33% 27%;
+    --color-ring: 212 35% 15%;
+    --color-primary: 210 40% 60%;
+    --color-primary-foreground: 217 33% 17%;
+    --color-secondary: 217 33% 27%;
+    --color-secondary-foreground: 210 40% 96%;
+    --color-destructive: 0 84% 60%;
+    --color-destructive-foreground: 217 33% 17%;
+    --color-muted: 217 33% 27%;
+    --color-muted-foreground: 210 40% 80%;
+    --color-accent: 210 40% 60%;
+    --color-accent-foreground: 217 33% 17%;
+    --color-popover: 217 33% 17%;
+    --color-popover-foreground: 210 40% 96%;
+    --color-card: 217 33% 20%;
+    --color-card-foreground: 210 40% 96%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

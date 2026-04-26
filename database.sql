@@ -155,6 +155,12 @@ alter table public.clinical_notes enable row level security;
 create policy "Users can view their own data" on public.users
   for select using (auth.uid() = id);
 
+create policy "Users can insert their own data" on public.users
+  for insert with check (auth.uid() = id);
+
+create policy "Users can update their own data" on public.users
+  for update using (auth.uid() = id) with check (auth.uid() = id);
+
 create policy "Patients are visible to their owner" on public.patients
   for all using (auth.uid() = user_id);
 
@@ -211,3 +217,23 @@ create trigger patient_groups_updated_at_trigger before update on public.patient
 
 create trigger clinical_notes_updated_at_trigger before update on public.clinical_notes
   for each row execute function public.update_updated_at_column();
+
+-- Auto-create a public.users row whenever a new auth.users row is created
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.users (id, email)
+  values (new.id, new.email)
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_auth_user();

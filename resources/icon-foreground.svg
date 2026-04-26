@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Adaptive icon foreground only (transparent background).
+    Used to generate maskable PWA icons and as a base for store assets.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <g transform="scale(9.481) translate(0,0)">
+    <path fill="#FFFFFF" d="M28,30 L36,30 L36,55 L28,55 Z" />
+    <path fill="#FFFFFF" d="M72,30 L80,30 L80,55 L72,55 Z" />
+    <path fill="#FFFFFF" d="M50,30 L58,30 L58,82 L50,82 Z" />
+    <path fill="#FFFFFF" d="M28,52 L36,52 C36,62 43,69 54,69 C65,69 72,62 72,52 L80,52 C80,67 68,77 54,77 C40,77 28,67 28,52 Z" />
+    <path fill="#FFFFFF" d="M44,80 L64,80 L64,84 L44,84 Z" />
+  </g>
+</svg>

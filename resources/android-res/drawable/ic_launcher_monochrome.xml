@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Monochrome layer for Android 13+ themed icons (Material You / Monet).
+    Color is irrelevant: the system tints this drawable to match the
+    user's wallpaper-derived palette. Same shape as the foreground,
+    drawn in solid black so the system can extract a clean alpha mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="0"
+        android:translateY="0">
+        <path
+            android:fillColor="#000000"
+            android:pathData="M28,30 L36,30 L36,55 L28,55 Z" />
+        <path
+            android:fillColor="#000000"
+            android:pathData="M72,30 L80,30 L80,55 L72,55 Z" />
+        <path
+            android:fillColor="#000000"
+            android:pathData="M50,30 L58,30 L58,82 L50,82 Z" />
+        <path
+            android:fillColor="#000000"
+            android:pathData="M28,52 L36,52 C36,62 43,69 54,69 C65,69 72,62 72,52 L80,52 C80,67 68,77 54,77 C40,77 28,67 28,52 Z" />
+        <path
+            android:fillColor="#000000"
+            android:pathData="M44,80 L64,80 L64,84 L44,84 Z" />
+    </group>
+</vector>

@@ -8,7 +8,7 @@ import { Button, Card, Input, PageHeader, useToast } from '@/components/ui'
 export default function SettingsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const { profile, updateProfile, isUpdating } = useUserProfile()
+  const { profile, updateProfileAsync, isUpdating } = useUserProfile()
   const {
     initialize,
     connect,
@@ -38,7 +38,7 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async () => {
     try {
-      await updateProfile({ full_name: profileData.fullName })
+      await updateProfileAsync({ full_name: profileData.fullName })
       toast.success('Profilo salvato con successo')
     } catch (error) {
       toast.error('Errore nel salvataggio del profilo', {

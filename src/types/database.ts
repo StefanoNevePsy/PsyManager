@@ -5,18 +5,79 @@ export interface Database {
         Row: {
           id: string
           email: string
+          full_name?: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           email: string
+          full_name?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           email?: string
+          full_name?: string | null
+          updated_at?: string
+        }
+      }
+      patient_groups: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          type: 'couple' | 'family' | 'other'
+          notes?: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          type?: 'couple' | 'family' | 'other'
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          type?: 'couple' | 'family' | 'other'
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+      clinical_notes: {
+        Row: {
+          id: string
+          user_id: string
+          patient_id: string
+          session_id?: string | null
+          title?: string | null
+          content: string
+          note_date: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          patient_id: string
+          session_id?: string | null
+          title?: string | null
+          content: string
+          note_date?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          patient_id?: string
+          session_id?: string | null
+          title?: string | null
+          content?: string
+          note_date?: string
           updated_at?: string
         }
       }
@@ -29,6 +90,8 @@ export interface Database {
           email?: string
           phone?: string
           notes?: string
+          group_id?: string | null
+          group_role?: string | null
           created_at: string
           updated_at: string
         }
@@ -40,6 +103,8 @@ export interface Database {
           email?: string
           phone?: string
           notes?: string
+          group_id?: string | null
+          group_role?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -49,6 +114,8 @@ export interface Database {
           email?: string
           phone?: string
           notes?: string
+          group_id?: string | null
+          group_role?: string | null
           updated_at?: string
         }
       }

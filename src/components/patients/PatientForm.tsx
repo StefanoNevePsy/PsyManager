@@ -1,7 +1,8 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { patientSchema, PatientFormData } from '@/lib/schemas'
-import { Button, Input, Textarea } from '@/components/ui'
+import { Button, Input, Select, Textarea } from '@/components/ui'
+import { usePatientGroups } from '@/hooks/usePatientGroups'
 import { Database } from '@/types/database'
 
 type Patient = Database['public']['Tables']['patients']['Row']
@@ -19,6 +20,8 @@ export default function PatientForm({
   onCancel,
   loading = false,
 }: Props) {
+  const { data: groups = [] } = usePatientGroups()
+
   const {
     register,
     handleSubmit,
@@ -31,6 +34,8 @@ export default function PatientForm({
       email: initialData?.email || '',
       phone: initialData?.phone || '',
       notes: initialData?.notes || '',
+      group_id: initialData?.group_id || '',
+      group_role: initialData?.group_role || '',
     },
   })
 
@@ -68,6 +73,33 @@ export default function PatientForm({
         {...register('phone')}
         error={errors.phone?.message}
       />
+
+      {/* Gruppo familiare / coppia */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
+        <Select
+          id="group_id"
+          label="Gruppo familiare / coppia"
+          hint="Opzionale: collega il paziente a un gruppo"
+          {...register('group_id')}
+          error={errors.group_id?.message}
+          options={[
+            { value: '', label: 'Nessun gruppo' },
+            ...groups.map((g) => ({
+              value: g.id,
+              label: `${g.name} (${
+                g.type === 'couple' ? 'coppia' : g.type === 'family' ? 'famiglia' : 'altro'
+              })`,
+            })),
+          ]}
+        />
+        <Input
+          id="group_role"
+          label="Ruolo nel gruppo"
+          placeholder="Es. madre, figlio, partner"
+          {...register('group_role')}
+          error={errors.group_role?.message}
+        />
+      </div>
 
       <Textarea
         id="notes"

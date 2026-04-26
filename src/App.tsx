@@ -16,6 +16,7 @@ import ReportsPage from '@/pages/ReportsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import ServiceTypesPage from '@/pages/ServiceTypesPage'
 import StructuresPage from '@/pages/StructuresPage'
+import ClinicalNotesPage from '@/pages/ClinicalNotesPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,6 +58,7 @@ function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/patients" element={<PatientsPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/clinical-notes" element={<ClinicalNotesPage />} />
             <Route path="/service-types" element={<ServiceTypesPage />} />
             <Route path="/structures" element={<StructuresPage />} />
             <Route path="/payments" element={<PaymentsPage />} />

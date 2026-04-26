@@ -1,11 +1,18 @@
 import { useState, useMemo } from 'react'
-import { Plus, Search, Edit, Trash2, Mail, Phone, Users } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Mail, Phone, Users, Heart, Home } from 'lucide-react'
 import {
   usePatients,
   useCreatePatient,
   useUpdatePatient,
   useDeletePatient,
 } from '@/hooks/usePatients'
+import {
+  usePatientGroups,
+  useCreatePatientGroup,
+  useUpdatePatientGroup,
+  useDeletePatientGroup,
+  PatientGroupWithMembers,
+} from '@/hooks/usePatientGroups'
 import {
   Button,
   Input,
@@ -19,7 +26,8 @@ import {
   useToast,
 } from '@/components/ui'
 import PatientForm from '@/components/patients/PatientForm'
-import { PatientFormData } from '@/lib/schemas'
+import PatientGroupForm from '@/components/patients/PatientGroupForm'
+import { PatientFormData, PatientGroupFormData } from '@/lib/schemas'
 import { Database } from '@/types/database'
 
 type Patient = Database['public']['Tables']['patients']['Row']
@@ -31,10 +39,58 @@ export default function PatientsPage() {
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
   const [deletingPatient, setDeletingPatient] = useState<Patient | null>(null)
 
+  // Group management state
+  const [groupModalOpen, setGroupModalOpen] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<PatientGroupWithMembers | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState<PatientGroupWithMembers | null>(null)
+  const [groupsListOpen, setGroupsListOpen] = useState(false)
+
   const { data: patients = [], isLoading } = usePatients()
+  const { data: groups = [] } = usePatientGroups()
   const createMutation = useCreatePatient()
   const updateMutation = useUpdatePatient()
   const deleteMutation = useDeletePatient()
+  const createGroupMutation = useCreatePatientGroup()
+  const updateGroupMutation = useUpdatePatientGroup()
+  const deleteGroupMutation = useDeletePatientGroup()
+
+  const handleGroupSubmit = async (data: PatientGroupFormData) => {
+    try {
+      const payload = {
+        name: data.name,
+        type: data.type,
+        notes: data.notes || null,
+      }
+      if (editingGroup) {
+        await updateGroupMutation.mutateAsync({ id: editingGroup.id, updates: payload })
+        toast.success('Gruppo aggiornato')
+      } else {
+        await createGroupMutation.mutateAsync(payload)
+        toast.success('Gruppo creato')
+      }
+      setGroupModalOpen(false)
+      setEditingGroup(null)
+    } catch (error) {
+      toast.error('Salvataggio fallito', {
+        description: error instanceof Error ? error.message : 'Riprova',
+      })
+    }
+  }
+
+  const handleGroupDelete = async () => {
+    if (!deletingGroup) return
+    try {
+      await deleteGroupMutation.mutateAsync(deletingGroup.id)
+      toast.success('Gruppo eliminato', {
+        description: 'I pazienti rimangono ma non sono più collegati al gruppo',
+      })
+      setDeletingGroup(null)
+    } catch (error) {
+      toast.error('Eliminazione fallita', {
+        description: error instanceof Error ? error.message : 'Riprova',
+      })
+    }
+  }
 
   const filteredPatients = useMemo(() => {
     if (!searchTerm) return patients
@@ -66,6 +122,8 @@ export default function PatientsPage() {
         email: data.email || undefined,
         phone: data.phone || undefined,
         notes: data.notes || undefined,
+        group_id: data.group_id || null,
+        group_role: data.group_role || null,
       }
 
       if (editingPatient) {
@@ -107,12 +165,23 @@ export default function PatientsPage() {
       <PageHeader
         eyebrow="Anagrafica"
         title="Pazienti"
-        description="Gestisci nomi, contatti e note. La ricerca filtra in tempo reale per nome, email e telefono."
+        description="Gestisci nomi, contatti, gruppi familiari/coppia e note."
         action={
-          <Button onClick={openCreateModal}>
-            <Plus className="w-4 h-4" strokeWidth={2.25} />
-            Nuovo paziente
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setGroupsListOpen(true)}>
+              <Users className="w-4 h-4" strokeWidth={2.25} />
+              Gestisci gruppi
+              {groups.length > 0 && (
+                <span className="ml-1 text-2xs px-1.5 py-0.5 rounded bg-primary-soft text-primary tabular-nums font-semibold">
+                  {groups.length}
+                </span>
+              )}
+            </Button>
+            <Button onClick={openCreateModal}>
+              <Plus className="w-4 h-4" strokeWidth={2.25} />
+              Nuovo paziente
+            </Button>
+          </div>
         }
       />
 
@@ -166,13 +235,37 @@ export default function PatientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredPatients.map((patient) => (
+                  {filteredPatients.map((patient) => {
+                    const group = groups.find((g) => g.id === patient.group_id)
+                    return (
                     <tr
                       key={patient.id}
                       className="text-foreground hover:bg-secondary/40 transition-colors"
                     >
                       <td className="py-3 px-5 font-medium">
-                        {patient.last_name} {patient.first_name}
+                        <div className="flex items-center gap-2">
+                          <span>
+                            {patient.last_name} {patient.first_name}
+                          </span>
+                          {group && (
+                            <Tooltip
+                              label={`${group.name}${
+                                patient.group_role ? ` · ${patient.group_role}` : ''
+                              }`}
+                            >
+                              <span className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-primary-soft text-primary font-semibold">
+                                {group.type === 'couple' ? (
+                                  <Heart className="w-3 h-3" strokeWidth={2.25} />
+                                ) : group.type === 'family' ? (
+                                  <Home className="w-3 h-3" strokeWidth={2.25} />
+                                ) : (
+                                  <Users className="w-3 h-3" strokeWidth={2.25} />
+                                )}
+                                <span className="truncate max-w-[100px]">{group.name}</span>
+                              </span>
+                            </Tooltip>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-5 text-muted-foreground">
                         {patient.email || '—'}
@@ -205,7 +298,8 @@ export default function PatientsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -288,6 +382,132 @@ export default function PatientsPage() {
         confirmText="Elimina"
         destructive
         loading={deleteMutation.isPending}
+      />
+
+      {/* Lista gruppi */}
+      <Modal
+        isOpen={groupsListOpen}
+        onClose={() => setGroupsListOpen(false)}
+        title="Gruppi familiari e coppie"
+        description="Raggruppa pazienti che condividono un percorso (coppie, famiglie). Assegna il gruppo dal form del paziente."
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingGroup(null)
+                setGroupModalOpen(true)
+              }}
+            >
+              <Plus className="w-4 h-4" strokeWidth={2.25} />
+              Nuovo gruppo
+            </Button>
+          </div>
+
+          {groups.length === 0 ? (
+            <EmptyState
+              icon={Heart}
+              size="sm"
+              title="Nessun gruppo"
+              description="Crea il primo gruppo per organizzare coppie o famiglie."
+            />
+          ) : (
+            <ul className="space-y-2">
+              {groups.map((g) => (
+                <li
+                  key={g.id}
+                  className="flex items-start gap-3 p-3 rounded-md border border-border hover:border-foreground/15 transition-colors"
+                >
+                  <div className="flex-shrink-0 w-9 h-9 rounded-md bg-primary-soft text-primary flex items-center justify-center">
+                    {g.type === 'couple' ? (
+                      <Heart className="w-4 h-4" strokeWidth={2} />
+                    ) : g.type === 'family' ? (
+                      <Home className="w-4 h-4" strokeWidth={2} />
+                    ) : (
+                      <Users className="w-4 h-4" strokeWidth={2} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="font-medium text-sm text-foreground truncate">{g.name}</p>
+                      <span className="text-2xs uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {g.type === 'couple' ? 'Coppia' : g.type === 'family' ? 'Famiglia' : 'Altro'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {g.members.length === 0
+                        ? 'Nessun membro'
+                        : g.members
+                            .map((m) => `${m.first_name}${m.group_role ? ` (${m.group_role})` : ''}`)
+                            .join(', ')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <Tooltip label="Modifica gruppo">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setEditingGroup(g)
+                          setGroupModalOpen(true)
+                        }}
+                      >
+                        <Edit className="w-4 h-4" strokeWidth={1.85} />
+                      </Button>
+                    </Tooltip>
+                    <Tooltip label="Elimina gruppo">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeletingGroup(g)}
+                      >
+                        <Trash2 className="w-4 h-4" strokeWidth={1.85} />
+                      </Button>
+                    </Tooltip>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Modal>
+
+      {/* Form gruppo */}
+      <Modal
+        isOpen={groupModalOpen}
+        onClose={() => {
+          setGroupModalOpen(false)
+          setEditingGroup(null)
+        }}
+        title={editingGroup ? 'Modifica gruppo' : 'Nuovo gruppo'}
+        size="md"
+      >
+        <PatientGroupForm
+          initialData={editingGroup || undefined}
+          onSubmit={handleGroupSubmit}
+          onCancel={() => {
+            setGroupModalOpen(false)
+            setEditingGroup(null)
+          }}
+          loading={createGroupMutation.isPending || updateGroupMutation.isPending}
+        />
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deletingGroup}
+        onClose={() => setDeletingGroup(null)}
+        onConfirm={handleGroupDelete}
+        title="Eliminare il gruppo?"
+        description={
+          deletingGroup
+            ? `Il gruppo "${deletingGroup.name}" verrà eliminato. I pazienti associati rimarranno ma perderanno il collegamento al gruppo.`
+            : ''
+        }
+        confirmText="Elimina"
+        destructive
+        loading={deleteGroupMutation.isPending}
       />
     </div>
   )

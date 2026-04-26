@@ -6,9 +6,29 @@ export const patientSchema = z.object({
   email: z.string().email('Email non valida').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
+  group_id: z.string().optional().or(z.literal('')),
+  group_role: z.string().max(50).optional().or(z.literal('')),
 })
 
 export type PatientFormData = z.infer<typeof patientSchema>
+
+export const patientGroupSchema = z.object({
+  name: z.string().min(1, 'Il nome è obbligatorio').max(100),
+  type: z.enum(['couple', 'family', 'other']),
+  notes: z.string().optional().or(z.literal('')),
+})
+
+export type PatientGroupFormData = z.infer<typeof patientGroupSchema>
+
+export const clinicalNoteSchema = z.object({
+  patient_id: z.string().min(1, 'Il paziente è obbligatorio'),
+  session_id: z.string().optional().or(z.literal('')),
+  title: z.string().max(200).optional().or(z.literal('')),
+  content: z.string().min(1, 'La nota non può essere vuota'),
+  note_date: z.string().min(1, 'La data è obbligatoria'),
+})
+
+export type ClinicalNoteFormData = z.infer<typeof clinicalNoteSchema>
 
 export const serviceTypeSchema = z.object({
   name: z.string().min(1, 'Il nome è obbligatorio').max(100),

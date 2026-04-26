@@ -29,7 +29,7 @@ export default function DashboardPage() {
     return 'Buonasera'
   })()
 
-  const username = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || ''
+  const username = profile?.full_name || user?.email?.split('@')[0] || ''
   const todayLabel = format(today, "EEEE d MMMM", { locale: it })
 
   const stats = [

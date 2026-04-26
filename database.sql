@@ -121,6 +121,27 @@ create table if not exists public.payments (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Patient tags table (user's custom tag definitions)
+create table if not exists public.patient_tags (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  name text not null,
+  color text not null default 'blue',
+  icon text not null default 'tag',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(user_id, name)
+);
+
+-- Patient tag assignments (many-to-many: patients can have multiple tags)
+create table if not exists public.patient_tag_assignments (
+  id uuid primary key default uuid_generate_v4(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  tag_id uuid not null references public.patient_tags(id) on delete cascade,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  unique(patient_id, tag_id)
+);
+
 -- Create indexes for performance
 create index if not exists patients_user_id_idx on public.patients(user_id);
 create index if not exists service_types_user_id_idx on public.service_types(user_id);
@@ -139,6 +160,9 @@ create index if not exists clinical_notes_user_id_idx on public.clinical_notes(u
 create index if not exists clinical_notes_patient_id_idx on public.clinical_notes(patient_id);
 create index if not exists clinical_notes_session_id_idx on public.clinical_notes(session_id);
 create index if not exists clinical_notes_note_date_idx on public.clinical_notes(note_date);
+create index if not exists patient_tags_user_id_idx on public.patient_tags(user_id);
+create index if not exists patient_tag_assignments_patient_id_idx on public.patient_tag_assignments(patient_id);
+create index if not exists patient_tag_assignments_tag_id_idx on public.patient_tag_assignments(tag_id);
 
 -- Enable Row Level Security
 alter table public.users enable row level security;
@@ -150,6 +174,8 @@ alter table public.package_agreements enable row level security;
 alter table public.payments enable row level security;
 alter table public.patient_groups enable row level security;
 alter table public.clinical_notes enable row level security;
+alter table public.patient_tags enable row level security;
+alter table public.patient_tag_assignments enable row level security;
 
 -- Create RLS policies
 create policy "Users can view their own data" on public.users
@@ -185,6 +211,17 @@ create policy "Patient groups visible to owner" on public.patient_groups
 create policy "Clinical notes visible to owner" on public.clinical_notes
   for all using (auth.uid() = user_id);
 
+create policy "Patient tags visible to owner" on public.patient_tags
+  for all using (auth.uid() = user_id);
+
+create policy "Patient tag assignments visible to owner" on public.patient_tag_assignments
+  for all using (
+    exists (
+      select 1 from public.patient_tags pt
+      where pt.id = tag_id and pt.user_id = auth.uid()
+    )
+  );
+
 -- Create triggers for updated_at
 create or replace function public.update_updated_at_column()
 returns trigger as $$
@@ -216,6 +253,9 @@ create trigger patient_groups_updated_at_trigger before update on public.patient
   for each row execute function public.update_updated_at_column();
 
 create trigger clinical_notes_updated_at_trigger before update on public.clinical_notes
+  for each row execute function public.update_updated_at_column();
+
+create trigger patient_tags_updated_at_trigger before update on public.patient_tags
   for each row execute function public.update_updated_at_column();
 
 -- Auto-create a public.users row whenever a new auth.users row is created

@@ -277,6 +277,50 @@ export interface Database {
           updated_at?: string
         }
       }
+      patient_tags: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          color: string
+          icon: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          color?: string
+          icon?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          color?: string
+          icon?: string
+          updated_at?: string
+        }
+      }
+      patient_tag_assignments: {
+        Row: {
+          id: string
+          patient_id: string
+          tag_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          patient_id: string
+          tag_id: string
+          created_at?: string
+        }
+        Update: {
+          patient_id?: string
+          tag_id?: string
+        }
+      }
     }
     Views: {}
     Functions: {}

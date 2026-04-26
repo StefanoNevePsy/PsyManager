@@ -92,3 +92,11 @@ export const paymentSchema = z.object({
 })
 
 export type PaymentFormData = z.infer<typeof paymentSchema>
+
+export const patientTagSchema = z.object({
+  name: z.string().min(1, 'Il nome è obbligatorio').max(50),
+  color: z.string().min(1, 'Seleziona un colore'),
+  icon: z.string().min(1, 'Seleziona un\'icona'),
+})
+
+export type PatientTagFormData = z.infer<typeof patientTagSchema>

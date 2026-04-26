@@ -43,3 +43,7 @@ pnpm-debug.log*
 
 # OS files
 Thumbs.db
+
+# Android keystore (sensitive)
+*.keystore
+.keystore_config

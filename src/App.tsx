@@ -6,6 +6,7 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import PWAUpdatePrompt from '@/components/PWAUpdatePrompt'
+import { ToastProvider } from '@/components/ui'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import PatientsPage from '@/pages/PatientsPage'
@@ -41,9 +42,10 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <PWAUpdatePrompt />
-      <Router basename={basename}>
-        <Routes>
+      <ToastProvider>
+        <PWAUpdatePrompt />
+        <Router basename={basename}>
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
             element={
@@ -63,7 +65,8 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </Router>
+        </Router>
+      </ToastProvider>
     </QueryClientProvider>
   )
 }

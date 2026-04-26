@@ -19,6 +19,8 @@ import {
   Card,
   PageHeader,
   ConfirmDialog,
+  Skeleton,
+  useToast,
 } from '@/components/ui'
 import SessionForm from '@/components/sessions/SessionForm'
 import CalendarView from '@/components/sessions/CalendarView'
@@ -31,6 +33,7 @@ import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 type View = 'calendar' | 'list'
 
 export default function SessionsPage() {
+  const { toast } = useToast()
   const [view, setView] = useState<View>('calendar')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [modalOpen, setModalOpen] = useState(false)
@@ -88,15 +91,20 @@ export default function SessionsPage() {
           id: editing.id,
           updates: cleanData,
         })
+        toast.success('Seduta aggiornata')
       } else {
         savedSession = await createMutation.mutateAsync(cleanData)
+        toast.success('Seduta pianificata')
       }
 
       if (isConnected() && savedSession) {
         try {
           await pushSessionToCalendar(savedSession as SessionWithRelations)
+          toast.info('Sincronizzata su Google Calendar')
         } catch (err) {
-          console.error('Calendar sync failed (non-fatal):', err)
+          toast.warning('Salvata, ma sync Calendar fallita', {
+            description: err instanceof Error ? err.message : 'Riprova dalle Impostazioni',
+          })
         }
       }
 
@@ -104,7 +112,9 @@ export default function SessionsPage() {
       setEditing(null)
       setDefaultDate(undefined)
     } catch (error) {
-      console.error('Error saving session:', error)
+      toast.error('Salvataggio fallito', {
+        description: error instanceof Error ? error.message : 'Riprova tra qualche istante',
+      })
     }
   }
 
@@ -115,51 +125,67 @@ export default function SessionsPage() {
       await deleteMutation.mutateAsync(deleting.id)
 
       if (isConnected() && calendarEventId) {
-        await removeSessionFromCalendar(calendarEventId)
+        try {
+          await removeSessionFromCalendar(calendarEventId)
+        } catch {
+          // non-fatal: session deleted, calendar cleanup will retry next sync
+        }
       }
 
       setDeleting(null)
+      toast.success('Seduta eliminata')
     } catch (error) {
-      console.error('Error deleting session:', error)
+      toast.error('Eliminazione fallita', {
+        description: error instanceof Error ? error.message : 'Riprova tra qualche istante',
+      })
     }
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="px-4 md:px-10 py-8 md:py-12 space-y-8 max-w-[1400px] mx-auto">
       <PageHeader
+        eyebrow="Agenda"
         title="Sedute"
-        description="Calendario e gestione delle tue sedute di terapia"
+        description="Calendario e lista delle tue sedute di terapia. Sincronizzate con Google Calendar se attivo."
         action={
           <Button onClick={() => openCreateModal()}>
-            <Plus className="w-5 h-5" />
-            Nuova Seduta
+            <Plus className="w-4 h-4" strokeWidth={2.25} />
+            Nuova seduta
           </Button>
         }
       />
 
-      <Card>
+      <Card variant="quiet" padding="md">
         <GoogleCalendarSync />
       </Card>
 
-      <Card>
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-          <div className="flex gap-2">
-            <Button
-              variant={view === 'calendar' ? 'primary' : 'ghost'}
-              size="sm"
+      <Card padding="none">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-wrap gap-3">
+          <div className="inline-flex p-1 bg-muted rounded-lg">
+            <button
               onClick={() => setView('calendar')}
+              aria-pressed={view === 'calendar'}
+              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium transition-all ${
+                view === 'calendar'
+                  ? 'bg-card text-foreground shadow-soft'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <CalendarDays className="w-4 h-4" />
+              <CalendarDays className="w-4 h-4" strokeWidth={1.85} />
               Calendario
-            </Button>
-            <Button
-              variant={view === 'list' ? 'primary' : 'ghost'}
-              size="sm"
+            </button>
+            <button
               onClick={() => setView('list')}
+              aria-pressed={view === 'list'}
+              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium transition-all ${
+                view === 'list'
+                  ? 'bg-card text-foreground shadow-soft'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <List className="w-4 h-4" />
+              <List className="w-4 h-4" strokeWidth={1.85} />
               Lista
-            </Button>
+            </button>
           </div>
 
           <Button
@@ -171,9 +197,12 @@ export default function SessionsPage() {
           </Button>
         </div>
 
+        <div className="p-4 md:p-5">
         {isLoading ? (
-          <div className="text-center py-16 text-muted-foreground">
-            Caricamento...
+          <div className="space-y-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-12 w-full bg-muted" />
+            ))}
           </div>
         ) : view === 'calendar' ? (
           <CalendarView
@@ -192,6 +221,7 @@ export default function SessionsPage() {
             emptyDescription="Aggiungi la tua prima seduta per iniziare"
           />
         )}
+        </div>
       </Card>
 
       <Modal
@@ -201,7 +231,8 @@ export default function SessionsPage() {
           setEditing(null)
           setDefaultDate(undefined)
         }}
-        title={editing ? 'Modifica Seduta' : 'Nuova Seduta'}
+        title={editing ? 'Modifica seduta' : 'Nuova seduta'}
+        description={editing ? 'Aggiorna data, paziente o prestazione.' : 'Pianifica una seduta scegliendo paziente e prestazione.'}
         size="lg"
       >
         <SessionForm
@@ -221,8 +252,8 @@ export default function SessionsPage() {
         isOpen={!!deleting}
         onClose={() => setDeleting(null)}
         onConfirm={handleDelete}
-        title="Elimina seduta"
-        description={`Sei sicuro di voler eliminare questa seduta con ${deleting?.patients?.last_name} ${deleting?.patients?.first_name}?`}
+        title="Eliminare la seduta?"
+        description={`La seduta con ${deleting?.patients?.last_name} ${deleting?.patients?.first_name} verrà rimossa. L'azione non è reversibile.`}
         confirmText="Elimina"
         destructive
         loading={deleteMutation.isPending}

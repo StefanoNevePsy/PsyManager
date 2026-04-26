@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,0..100&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,50 +6,76 @@
 
 @layer base {
   :root {
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
-    /* Light theme */
-    --color-background: 0 0% 100%;
-    --color-foreground: 0 0% 3.6%;
-    --color-border: 0 0% 89.8%;
-    --color-input: 0 0% 89.8%;
-    --color-ring: 210 40% 96%;
-    --color-primary: 210 40% 50%;
-    --color-primary-foreground: 210 40% 98%;
-    --color-secondary: 210 14% 97%;
-    --color-secondary-foreground: 210 40% 50%;
-    --color-destructive: 0 84% 60%;
-    --color-destructive-foreground: 210 40% 98%;
-    --color-muted: 210 14% 97%;
-    --color-muted-foreground: 210 11% 36%;
-    --color-accent: 210 40% 50%;
-    --color-accent-foreground: 210 40% 98%;
-    --color-popover: 0 0% 100%;
-    --color-popover-foreground: 0 0% 3.6%;
+    /* Light theme — tinted blue neutrals */
+    --color-background: 220 25% 98.5%;
+    --color-foreground: 222 35% 11%;
+    --color-border: 220 14% 91%;
+    --color-input: 220 14% 96%;
+    --color-ring: 217 91% 60%;
+    --color-primary: 217 91% 56%;
+    --color-primary-foreground: 220 25% 99%;
+    --color-secondary: 220 14% 96%;
+    --color-secondary-foreground: 222 35% 18%;
+    --color-destructive: 0 78% 56%;
+    --color-destructive-foreground: 0 0% 99%;
+    --color-muted: 220 14% 96%;
+    --color-muted-foreground: 220 9% 46%;
+    --color-accent: 217 91% 56%;
+    --color-accent-foreground: 0 0% 99%;
+    --color-popover: 220 25% 99%;
+    --color-popover-foreground: 222 35% 11%;
     --color-card: 0 0% 100%;
-    --color-card-foreground: 0 0% 3.6%;
+    --color-card-foreground: 222 35% 11%;
+
+    /* Semantic */
+    --color-success: 152 60% 38%;
+    --color-success-foreground: 0 0% 99%;
+    --color-warning: 32 95% 50%;
+    --color-warning-foreground: 0 0% 99%;
+    --color-info: 199 89% 48%;
+    --color-info-foreground: 0 0% 99%;
+
+    /* Subtle accent surfaces */
+    --color-primary-soft: 217 91% 96%;
+    --color-success-soft: 152 60% 95%;
+    --color-warning-soft: 32 95% 95%;
+    --color-destructive-soft: 0 78% 96%;
   }
 
   .dark {
-    --color-background: 217 33% 17%;
-    --color-foreground: 210 40% 96%;
-    --color-border: 217 33% 27%;
-    --color-input: 217 33% 27%;
-    --color-ring: 212 35% 15%;
-    --color-primary: 210 40% 60%;
-    --color-primary-foreground: 217 33% 17%;
-    --color-secondary: 217 33% 27%;
-    --color-secondary-foreground: 210 40% 96%;
-    --color-destructive: 0 84% 60%;
-    --color-destructive-foreground: 217 33% 17%;
-    --color-muted: 217 33% 27%;
-    --color-muted-foreground: 210 40% 80%;
-    --color-accent: 210 40% 60%;
-    --color-accent-foreground: 217 33% 17%;
-    --color-popover: 217 33% 17%;
-    --color-popover-foreground: 210 40% 96%;
-    --color-card: 217 33% 20%;
-    --color-card-foreground: 210 40% 96%;
+    --color-background: 222 28% 8%;
+    --color-foreground: 220 18% 95%;
+    --color-border: 222 18% 20%;
+    --color-input: 222 22% 14%;
+    --color-ring: 217 91% 60%;
+    --color-primary: 217 91% 65%;
+    --color-primary-foreground: 222 28% 8%;
+    --color-secondary: 222 22% 14%;
+    --color-secondary-foreground: 220 18% 90%;
+    --color-destructive: 0 72% 60%;
+    --color-destructive-foreground: 0 0% 99%;
+    --color-muted: 222 22% 14%;
+    --color-muted-foreground: 220 12% 65%;
+    --color-accent: 217 91% 65%;
+    --color-accent-foreground: 222 28% 8%;
+    --color-popover: 222 24% 12%;
+    --color-popover-foreground: 220 18% 95%;
+    --color-card: 222 26% 11%;
+    --color-card-foreground: 220 18% 95%;
+
+    --color-success: 152 55% 50%;
+    --color-success-foreground: 222 28% 8%;
+    --color-warning: 32 90% 60%;
+    --color-warning-foreground: 222 28% 8%;
+    --color-info: 199 85% 60%;
+    --color-info-foreground: 222 28% 8%;
+
+    --color-primary-soft: 217 50% 18%;
+    --color-success-soft: 152 30% 16%;
+    --color-warning-soft: 32 40% 16%;
+    --color-destructive-soft: 0 30% 18%;
   }
 
   * {
@@ -57,7 +83,19 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::selection {
+    background-color: hsl(var(--color-primary) / 0.18);
+    color: hsl(var(--color-foreground));
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--color-ring));
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
@@ -66,7 +104,122 @@ html {
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Display font: Fraunces for editorial headings */
+.font-display {
+  font-family: 'Fraunces', Georgia, 'Times New Roman', serif;
+  font-feature-settings: 'ss01', 'ss02';
+  font-variation-settings: 'opsz' 96, 'SOFT' 50;
+  letter-spacing: -0.015em;
+}
+
+.font-display-soft {
+  font-family: 'Fraunces', Georgia, serif;
+  font-variation-settings: 'opsz' 144, 'SOFT' 100;
+  letter-spacing: -0.025em;
+}
+
+/* Tabular numerals utility for tables/numbers */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smooth transitions globally for color/bg shifts */
+@layer base {
+  button, a, [role="button"] {
+    transition: color 150ms cubic-bezier(0.165, 0.84, 0.44, 1),
+                background-color 150ms cubic-bezier(0.165, 0.84, 0.44, 1),
+                border-color 150ms cubic-bezier(0.165, 0.84, 0.44, 1),
+                opacity 150ms cubic-bezier(0.165, 0.84, 0.44, 1);
+  }
+}
+
+/* Subtle dotted background for empty states / login bg */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle at 1px 1px, hsl(var(--color-border)) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-from-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-from-bottom {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.animate-slide-up {
+  animation: slide-up 250ms cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.animate-slide-in-from-right {
+  animation: slide-in-from-right 200ms cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.animate-slide-in-from-bottom {
+  animation: slide-in-from-bottom 250ms cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.animate-scale-in {
+  animation: scale-in 180ms cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--color-muted)) 0%,
+    hsl(var(--color-secondary)) 50%,
+    hsl(var(--color-muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

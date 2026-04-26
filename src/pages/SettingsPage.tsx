@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Save, Calendar, Shield, User } from 'lucide-react'
+import { Save, Calendar, Shield, User, AlertCircle, Check, Cloud } from 'lucide-react'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useAuth } from '@/hooks/useAuth'
-import { Button, Card, Input, PageHeader } from '@/components/ui'
+import { Button, Card, Input, PageHeader, useToast } from '@/components/ui'
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const {
     initialize,
     connect,
@@ -21,129 +22,142 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    if (!initialized) {
-      initialize()
-    }
+    if (!initialized) initialize()
   }, [initialized, initialize])
 
+  const handleConnect = async () => {
+    await connect()
+    if (isConnected()) {
+      toast.success('Google Calendar collegato')
+    }
+  }
+
+  const handleDisconnect = () => {
+    disconnect()
+    toast.info('Google Calendar disconnesso')
+  }
+
+  const showOnboarding = () => {
+    localStorage.removeItem('psymanager:onboarding-dismissed')
+    window.location.reload()
+  }
+
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-3xl">
+    <div className="px-4 md:px-10 py-8 md:py-12 space-y-8 max-w-3xl mx-auto">
       <PageHeader
+        eyebrow="Configurazione"
         title="Impostazioni"
-        description="Configura il tuo profilo e le integrazioni"
+        description="Profilo, integrazioni e sicurezza del tuo account."
       />
 
-      {/* Profile Settings */}
+      {/* Profile */}
       <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <User className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold text-foreground">Profilo</h2>
+        <div className="flex items-center gap-2 mb-5">
+          <User className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+          <h2 className="font-display text-xl font-semibold tracking-tight">Profilo</h2>
         </div>
 
         <div className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            value={profileData.email}
-            disabled
-          />
+          <Input label="Email" type="email" value={profileData.email} disabled />
 
           <Input
-            label="Nome Completo"
+            label="Nome completo"
             type="text"
             value={profileData.fullName}
-            onChange={(e) =>
-              setProfileData({ ...profileData, fullName: e.target.value })
-            }
+            onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
             placeholder="Dr. Mario Rossi"
+            hint="Mostrato nella sezione utente."
           />
 
-          <div className="flex justify-end">
-            <Button>
-              <Save className="w-4 h-4" />
-              Salva Profilo
+          <div className="flex justify-end pt-2">
+            <Button onClick={() => toast.success('Profilo salvato')}>
+              <Save className="w-4 h-4" strokeWidth={2} />
+              Salva profilo
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* Google Calendar Integration */}
+      {/* Google Calendar */}
       <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <Calendar className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold text-foreground">
-            Integrazione Google Calendar
-          </h2>
+        <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+            <h2 className="font-display text-xl font-semibold tracking-tight">
+              Google Calendar
+            </h2>
+          </div>
+          {isConnected() && (
+            <span className="inline-flex items-center gap-1.5 text-2xs uppercase tracking-wider font-semibold px-2 py-1 rounded-md bg-success-soft text-success">
+              <Check className="w-3 h-3" strokeWidth={2.5} />
+              Collegato
+            </span>
+          )}
         </div>
 
-        <p className="text-muted-foreground mb-4 text-sm">
-          Sincronizza automaticamente le tue sedute con Google Calendar. Le
-          modifiche fatte in PsyManager si rifletteranno sul Calendar e viceversa.
+        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+          Sincronizza automaticamente le tue sedute con Google Calendar. Le modifiche fatte in
+          PsyManager si rifletteranno sul Calendar.
         </p>
 
         {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-          <div className="bg-orange-500/10 text-orange-600 dark:text-orange-400 p-3 rounded-lg text-sm mb-4">
-            ⚠️ Google Client ID non configurato. Configura{' '}
-            <code className="bg-orange-500/20 px-1 rounded">
-              VITE_GOOGLE_CLIENT_ID
-            </code>{' '}
-            nel file .env per abilitare l'integrazione.
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-warning-soft border border-warning/20 text-warning mb-4">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2.25} />
+            <p className="text-sm leading-snug">
+              Google Client ID non configurato. Aggiungi{' '}
+              <code className="px-1.5 py-0.5 rounded bg-warning/10 text-2xs">VITE_GOOGLE_CLIENT_ID</code>{' '}
+              ai secrets del repository per abilitare l'integrazione.
+            </p>
           </div>
         )}
 
         {error && (
-          <div className="bg-destructive/10 text-destructive p-3 rounded-lg text-sm mb-4">
-            {error}
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-destructive-soft border border-destructive/20 text-destructive mb-4">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2.25} />
+            <p className="text-sm leading-snug">{error}</p>
           </div>
         )}
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
           {isConnected() ? (
-            <>
-              <span className="bg-green-500/10 text-green-600 dark:text-green-400 px-3 py-1.5 rounded-full text-sm font-medium">
-                ✓ Connesso
-              </span>
-              <Button variant="outline" onClick={disconnect}>
-                Disconnetti
-              </Button>
-            </>
+            <Button variant="outline" onClick={handleDisconnect}>
+              Disconnetti
+            </Button>
           ) : (
             <Button
-              onClick={connect}
+              onClick={handleConnect}
               loading={loading}
               disabled={!import.meta.env.VITE_GOOGLE_CLIENT_ID}
             >
-              <Calendar className="w-4 h-4" />
-              Connetti Google Calendar
+              <Cloud className="w-4 h-4" strokeWidth={2} />
+              Collega Google Calendar
             </Button>
           )}
         </div>
       </Card>
 
-      {/* Security Settings */}
+      {/* Security */}
       <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <Shield className="w-5 h-5 text-muted-foreground" />
-          <h2 className="text-xl font-semibold text-foreground">Sicurezza</h2>
+        <div className="flex items-center gap-2 mb-5">
+          <Shield className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+          <h2 className="font-display text-xl font-semibold tracking-tight">Sicurezza</h2>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <p className="font-medium text-foreground mb-1">Cambia Password</p>
-            <p className="text-sm text-muted-foreground mb-3">
-              Modifica la password del tuo account
+        <div className="divide-y divide-border">
+          <div className="pb-5">
+            <p className="font-medium text-foreground mb-1">Cambia password</p>
+            <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
+              Modifica la password del tuo account.
             </p>
             <Button variant="outline" size="sm">
-              Cambia Password
+              Cambia password
             </Button>
           </div>
 
-          <div className="border-t border-border pt-4">
-            <p className="font-medium text-foreground mb-1">
-              Autenticazione a Due Fattori
-            </p>
-            <p className="text-sm text-muted-foreground mb-3">
-              Aggiungi un livello extra di sicurezza al tuo account (in arrivo)
+          <div className="pt-5">
+            <p className="font-medium text-foreground mb-1">Autenticazione a due fattori</p>
+            <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
+              Aggiungi un livello extra di sicurezza. In arrivo.
             </p>
             <Button variant="outline" size="sm" disabled>
               Configura 2FA
@@ -152,16 +166,28 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* About */}
-      <Card>
-        <h2 className="text-xl font-semibold text-foreground mb-2">
-          Informazioni
+      {/* Helpers */}
+      <Card variant="quiet">
+        <h2 className="font-display text-xl font-semibold tracking-tight mb-2">
+          Hai bisogno di aiuto?
         </h2>
-        <div className="space-y-1 text-sm text-muted-foreground">
-          <p>PsyManager v1.0.0</p>
-          <p>Gestionale gratuito per psicologi e terapeuti</p>
-        </div>
+        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+          Rivedi la guida iniziale per impostare i fondamentali (paziente, prestazione, seduta).
+        </p>
+        <Button variant="outline" size="sm" onClick={showOnboarding}>
+          Mostra guida iniziale
+        </Button>
       </Card>
+
+      {/* About */}
+      <div className="pt-4 border-t border-border text-center">
+        <p className="font-display text-lg tracking-tight font-medium">
+          PsyManager <span className="text-muted-foreground tabular-nums">v1.0.0</span>
+        </p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Gestionale gratuito per psicologi e terapeuti.
+        </p>
+      </div>
     </div>
   )
 }

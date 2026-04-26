@@ -3,6 +3,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { Moon, Sun, LogOut, Settings, User, Menu } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { Tooltip } from '@/components/ui'
+import SyncStatusIndicator from '@/components/SyncStatusIndicator'
 
 interface Props {
   onMenuClick?: () => void
@@ -33,69 +35,99 @@ export default function Header({ onMenuClick }: Props) {
     navigate('/login')
   }
 
+  const initial = user?.email?.[0].toUpperCase() || 'U'
+  const username = user?.email?.split('@')[0] || ''
+
   return (
-    <header className="h-16 border-b border-border bg-card flex items-center justify-between px-4 md:px-6 sticky top-0 z-40">
-      <div className="flex items-center gap-4">
+    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md flex items-center justify-between px-4 md:px-6 sticky top-0 z-40">
+      <div className="flex items-center gap-2">
         <button
           onClick={onMenuClick}
-          className="md:hidden p-2 rounded-lg hover:bg-secondary transition-colors"
+          className="md:hidden -ml-2 p-2 rounded-md hover:bg-secondary transition-colors"
+          aria-label="Apri menu di navigazione"
         >
           <Menu className="w-5 h-5" />
         </button>
-        <h1 className="text-xl font-semibold text-card-foreground">PsyManager</h1>
+        <Link to="/" className="md:hidden flex items-center gap-2 group">
+          <div className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center font-display text-base font-bold">
+            ψ
+          </div>
+          <span className="font-display text-lg font-semibold text-foreground tracking-tight">
+            PsyManager
+          </span>
+        </Link>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg hover:bg-secondary transition-colors"
-          title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? (
-            <Moon className="w-5 h-5" />
-          ) : (
-            <Sun className="w-5 h-5" />
-          )}
-        </button>
+      <div className="flex items-center gap-1">
+        <SyncStatusIndicator />
 
-        <div className="relative" ref={dropdownRef}>
+        <Tooltip
+          label={theme === 'light' ? 'Passa al tema scuro' : 'Passa al tema chiaro'}
+          side="bottom"
+        >
+          <button
+            onClick={toggleTheme}
+            aria-label={
+              theme === 'light' ? 'Passa al tema scuro' : 'Passa al tema chiaro'
+            }
+            className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
+          >
+            {theme === 'light' ? (
+              <Moon className="w-[18px] h-[18px]" strokeWidth={1.85} />
+            ) : (
+              <Sun className="w-[18px] h-[18px]" strokeWidth={1.85} />
+            )}
+          </button>
+        </Tooltip>
+
+        <div className="relative ml-1" ref={dropdownRef}>
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="p-2 rounded-lg hover:bg-secondary transition-colors flex items-center gap-2"
+            aria-label="Menu utente"
+            aria-expanded={isOpen}
+            className="h-9 pl-1 pr-2 rounded-full hover:bg-secondary/70 transition-colors flex items-center gap-2"
           >
-            <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-              {user?.email?.[0].toUpperCase() || 'U'}
+            <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
+              {initial}
             </div>
+            <span className="hidden md:inline text-sm font-medium text-foreground max-w-[120px] truncate">
+              {username}
+            </span>
           </button>
 
           {isOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+            <div className="absolute right-0 mt-2 w-60 bg-popover border border-border rounded-lg shadow-pop z-50 overflow-hidden animate-scale-in origin-top-right">
               <div className="px-4 py-3 border-b border-border">
+                <p className="text-2xs uppercase tracking-wider text-muted-foreground font-medium mb-0.5">
+                  Connesso come
+                </p>
                 <p className="text-sm font-medium text-popover-foreground truncate">
                   {user?.email}
                 </p>
               </div>
-              <Link
-                to="/settings"
-                onClick={() => setIsOpen(false)}
-                className="w-full text-left px-4 py-2 hover:bg-secondary flex items-center gap-2 text-popover-foreground"
-              >
-                <User className="w-4 h-4" />
-                Profilo
-              </Link>
-              <Link
-                to="/settings"
-                onClick={() => setIsOpen(false)}
-                className="w-full text-left px-4 py-2 hover:bg-secondary flex items-center gap-2 text-popover-foreground"
-              >
-                <Settings className="w-4 h-4" />
-                Impostazioni
-              </Link>
+              <div className="py-1">
+                <Link
+                  to="/settings"
+                  onClick={() => setIsOpen(false)}
+                  className="w-full text-left px-4 py-2 hover:bg-secondary flex items-center gap-2.5 text-sm text-popover-foreground"
+                >
+                  <User className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+                  Profilo
+                </Link>
+                <Link
+                  to="/settings"
+                  onClick={() => setIsOpen(false)}
+                  className="w-full text-left px-4 py-2 hover:bg-secondary flex items-center gap-2.5 text-sm text-popover-foreground"
+                >
+                  <Settings className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+                  Impostazioni
+                </Link>
+              </div>
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-2 hover:bg-secondary flex items-center gap-2 text-destructive border-t border-border"
+                className="w-full text-left px-4 py-2.5 hover:bg-destructive-soft flex items-center gap-2.5 text-sm text-destructive border-t border-border"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4" strokeWidth={1.85} />
                 Esci
               </button>
             </div>

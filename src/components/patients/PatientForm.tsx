@@ -39,13 +39,15 @@ export default function PatientForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input
           id="first_name"
-          label="Nome *"
+          label="Nome"
+          required
           {...register('first_name')}
           error={errors.first_name?.message}
         />
         <Input
           id="last_name"
-          label="Cognome *"
+          label="Cognome"
+          required
           {...register('last_name')}
           error={errors.last_name?.message}
         />

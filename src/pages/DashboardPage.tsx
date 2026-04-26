@@ -13,10 +13,12 @@ import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { useDashboardStats } from '@/hooks/useDashboardStats'
 import { useAuth } from '@/hooks/useAuth'
+import { useUserProfile } from '@/hooks/useUserProfile'
 import { Button, Card, EmptyState, Skeleton } from '@/components/ui'
 
 export default function DashboardPage() {
   const { user } = useAuth()
+  const { profile } = useUserProfile()
   const { data, isLoading } = useDashboardStats()
 
   const today = new Date()
@@ -27,7 +29,7 @@ export default function DashboardPage() {
     return 'Buonasera'
   })()
 
-  const username = user?.email?.split('@')[0] || ''
+  const username = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || ''
   const todayLabel = format(today, "EEEE d MMMM", { locale: it })
 
   const stats = [

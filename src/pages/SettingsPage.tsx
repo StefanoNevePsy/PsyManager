@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { Save, Calendar, Shield, User, AlertCircle, Check, Cloud } from 'lucide-react'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useAuth } from '@/hooks/useAuth'
+import { useUserProfile } from '@/hooks/useUserProfile'
 import { Button, Card, Input, PageHeader, useToast } from '@/components/ui'
 
 export default function SettingsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { profile, updateProfile, isUpdating } = useUserProfile()
   const {
     initialize,
     connect,
@@ -22,8 +24,28 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
+    if (profile) {
+      setProfileData({
+        fullName: profile.full_name || '',
+        email: profile.email || '',
+      })
+    }
+  }, [profile])
+
+  useEffect(() => {
     if (!initialized) initialize()
   }, [initialized, initialize])
+
+  const handleSaveProfile = async () => {
+    try {
+      await updateProfile({ full_name: profileData.fullName })
+      toast.success('Profilo salvato con successo')
+    } catch (error) {
+      toast.error('Errore nel salvataggio del profilo', {
+        description: error instanceof Error ? error.message : 'Riprova più tardi',
+      })
+    }
+  }
 
   const handleConnect = async () => {
     await connect()
@@ -70,7 +92,7 @@ export default function SettingsPage() {
           />
 
           <div className="flex justify-end pt-2">
-            <Button onClick={() => toast.success('Profilo salvato')}>
+            <Button onClick={handleSaveProfile} loading={isUpdating} disabled={isUpdating}>
               <Save className="w-4 h-4" strokeWidth={2} />
               Salva profilo
             </Button>

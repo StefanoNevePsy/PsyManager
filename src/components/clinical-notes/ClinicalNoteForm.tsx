@@ -1,9 +1,10 @@
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { clinicalNoteSchema, ClinicalNoteFormData } from '@/lib/schemas'
-import { Button, Input, Select, Textarea } from '@/components/ui'
+import { Button, Input, Select, RichTextEditor } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
 import { useSessions } from '@/hooks/useSessions'
+import AttachmentList from '@/components/attachments/AttachmentList'
 import { Database } from '@/types/database'
 
 type ClinicalNote = Database['public']['Tables']['clinical_notes']['Row']
@@ -32,6 +33,7 @@ export default function ClinicalNoteForm({
     register,
     handleSubmit,
     watch,
+    control,
     formState: { errors },
   } = useForm<ClinicalNoteFormData>({
     resolver: zodResolver(clinicalNoteSchema),
@@ -104,15 +106,45 @@ export default function ClinicalNoteForm({
         error={errors.title?.message}
       />
 
-      <Textarea
-        id="content"
-        label="Contenuto"
-        required
-        placeholder="Scrivi qui le tue note cliniche..."
-        rows={10}
-        {...register('content')}
-        error={errors.content?.message}
-      />
+      <div>
+        <label className="block text-sm font-medium mb-1.5">
+          Contenuto <span className="text-destructive">*</span>
+        </label>
+        <Controller
+          name="content"
+          control={control}
+          render={({ field }) => (
+            <RichTextEditor
+              value={field.value}
+              onChange={field.onChange}
+              placeholder="Scrivi qui le tue note cliniche... Usa Markdown o le scorciatoie da tastiera"
+              minHeight="240px"
+              ariaLabel="Contenuto nota clinica"
+            />
+          )}
+        />
+        {errors.content?.message && (
+          <p className="text-xs text-destructive mt-1">{errors.content.message}</p>
+        )}
+        <p className="text-xs text-muted-foreground mt-1.5">
+          Suggerimenti: <code className="text-2xs px-1 py-0.5 bg-secondary rounded">**grassetto**</code>{' '}
+          <code className="text-2xs px-1 py-0.5 bg-secondary rounded">*corsivo*</code>{' '}
+          <code className="text-2xs px-1 py-0.5 bg-secondary rounded">## Titolo</code>{' '}
+          <code className="text-2xs px-1 py-0.5 bg-secondary rounded">- elenco</code>{' '}
+          <code className="text-2xs px-1 py-0.5 bg-secondary rounded">{'> citazione'}</code>{' '}
+          <code className="text-2xs px-1 py-0.5 bg-secondary rounded">[ ] task</code>
+        </p>
+      </div>
+
+      {initialData?.id && (
+        <div className="pt-4 border-t border-border">
+          <AttachmentList
+            ownerType="clinical_note"
+            ownerId={initialData.id}
+            description="Allega immagini, SVG di genogrammi o PDF (max 10 MB ciascuno)"
+          />
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-4 border-t border-border">
         <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>

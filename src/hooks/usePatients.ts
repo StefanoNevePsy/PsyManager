@@ -5,11 +5,13 @@ import { Database } from '@/types/database'
 
 type Patient = Database['public']['Tables']['patients']['Row']
 type PatientTag = Database['public']['Tables']['patient_tags']['Row']
+type PatientContact = Database['public']['Tables']['patient_contacts']['Row']
 type PatientInsert = Database['public']['Tables']['patients']['Insert']
 type PatientUpdate = Database['public']['Tables']['patients']['Update']
 
 export interface PatientWithTags extends Patient {
   patient_tags?: PatientTag[]
+  patient_contacts?: PatientContact[]
 }
 
 export const usePatients = () => {
@@ -26,7 +28,8 @@ export const usePatients = () => {
           *,
           patient_tag_assignments(
             patient_tags(id, user_id, name, color, icon, created_at, updated_at)
-          )
+          ),
+          patient_contacts(*)
         `
         )
         .eq('user_id', user.id)
@@ -60,7 +63,8 @@ export const usePatient = (id: string | undefined) => {
           *,
           patient_tag_assignments(
             patient_tags(id, user_id, name, color, icon, created_at, updated_at)
-          )
+          ),
+          patient_contacts(*)
         `
         )
         .eq('id', id)

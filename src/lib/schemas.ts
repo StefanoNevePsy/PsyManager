@@ -1,5 +1,29 @@
 import { z } from 'zod'
 
+export const patientContactSchema = z.object({
+  id: z.string().optional(),
+  kind: z.enum(['phone', 'email']),
+  label: z.string().max(50).optional().or(z.literal('')),
+  value: z
+    .string()
+    .min(1, 'Il valore è obbligatorio')
+    .refine((v) => v.length > 0, 'Il valore è obbligatorio'),
+})
+
+export type PatientContactFormData = z.infer<typeof patientContactSchema>
+
+export const familyMemberSchema = z.object({
+  id: z.string().optional(),
+  relationship: z.string().min(1, 'Specifica la relazione'),
+  full_name: z.string().max(100).optional().or(z.literal('')),
+  age: z.number().int().min(0).max(130).nullable().optional(),
+  alive: z.boolean(),
+  relationship_quality: z.string().max(100).optional().or(z.literal('')),
+  notes: z.string().optional().or(z.literal('')),
+})
+
+export type FamilyMemberFormData = z.infer<typeof familyMemberSchema>
+
 export const patientSchema = z.object({
   first_name: z.string().min(1, 'Il nome è obbligatorio').max(100),
   last_name: z.string().min(1, 'Il cognome è obbligatorio').max(100),
@@ -8,6 +32,8 @@ export const patientSchema = z.object({
   notes: z.string().optional().or(z.literal('')),
   group_id: z.string().optional().or(z.literal('')),
   group_role: z.string().max(50).optional().or(z.literal('')),
+  contacts: z.array(patientContactSchema).optional(),
+  family_members: z.array(familyMemberSchema).optional(),
 })
 
 export type PatientFormData = z.infer<typeof patientSchema>

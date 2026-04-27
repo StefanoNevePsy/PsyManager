@@ -16,6 +16,8 @@ import {
 } from '@/hooks/usePatientGroups'
 import { usePatientTags } from '@/hooks/usePatientTags'
 import { usePatientTagAssignments } from '@/hooks/usePatientTagAssignments'
+import { useReplacePatientContacts } from '@/hooks/usePatientContacts'
+import { useReplaceFamilyMembers } from '@/hooks/usePatientFamilyMembers'
 import {
   Button,
   Input,
@@ -71,6 +73,8 @@ export default function PatientsPage() {
   // Tag hooks
   const { tags, createTag, updateTag, deleteTag, isCreating: isCreatingTag, isUpdating: isUpdatingTag, isDeleting: isDeletingTag } = usePatientTags()
   const { assignedTagIds: patientTagIds = [], toggleTag: togglePatientTag } = usePatientTagAssignments(assignmentPatient?.id)
+  const replaceContactsMutation = useReplacePatientContacts()
+  const replaceFamilyMutation = useReplaceFamilyMembers()
 
   const handleTagSubmit = async (data: PatientTagFormData) => {
     try {
@@ -188,17 +192,47 @@ export default function PatientsPage() {
         group_role: data.group_role || null,
       }
 
+      const contacts = (data.contacts || [])
+        .filter((c) => c.value && c.value.trim().length > 0)
+        .map((c) => ({
+          id: c.id,
+          kind: c.kind,
+          label: c.label || '',
+          value: c.value.trim(),
+        }))
+
+      let patientId: string
       if (editingPatient) {
         await updateMutation.mutateAsync({ id: editingPatient.id, updates: cleanData })
+        patientId = editingPatient.id
         toast.success('Paziente aggiornato', {
           description: `${cleanData.first_name} ${cleanData.last_name}`,
         })
       } else {
-        await createMutation.mutateAsync(cleanData)
+        const created = await createMutation.mutateAsync(cleanData)
+        patientId = created.id
         toast.success('Paziente aggiunto', {
           description: `${cleanData.first_name} ${cleanData.last_name} è ora in carico`,
         })
       }
+
+      // Sync additional contacts (delete removed, update existing, insert new)
+      await replaceContactsMutation.mutateAsync({ patientId, contacts })
+
+      // Sync family members (textual genogram)
+      const familyMembers = (data.family_members || [])
+        .filter((m) => m.relationship && m.relationship.trim().length > 0)
+        .map((m) => ({
+          id: m.id,
+          relationship: m.relationship.trim(),
+          full_name: (m.full_name || '').trim(),
+          age: m.age ?? null,
+          alive: m.alive,
+          relationship_quality: (m.relationship_quality || '').trim() || null,
+          notes: (m.notes || '').trim() || null,
+        }))
+      await replaceFamilyMutation.mutateAsync({ patientId, members: familyMembers })
+
       setModalOpen(false)
       setEditingPatient(null)
     } catch (error) {
@@ -369,10 +403,48 @@ export default function PatientsPage() {
                         </div>
                       </td>
                       <td className="py-3 px-5 text-muted-foreground">
-                        {patient.email || '—'}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{patient.email || '—'}</span>
+                          {(() => {
+                            const extraEmails = (patient.patient_contacts || []).filter(
+                              (c) => c.kind === 'email'
+                            )
+                            if (extraEmails.length === 0) return null
+                            return (
+                              <Tooltip
+                                label={extraEmails
+                                  .map((c) => `${c.label || 'Email'}: ${c.value}`)
+                                  .join('\n')}
+                              >
+                                <span className="flex-shrink-0 text-2xs px-1.5 py-0.5 rounded bg-secondary text-foreground font-semibold">
+                                  +{extraEmails.length}
+                                </span>
+                              </Tooltip>
+                            )
+                          })()}
+                        </div>
                       </td>
                       <td className="py-3 px-5 text-muted-foreground tabular-nums">
-                        {patient.phone || '—'}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{patient.phone || '—'}</span>
+                          {(() => {
+                            const extraPhones = (patient.patient_contacts || []).filter(
+                              (c) => c.kind === 'phone'
+                            )
+                            if (extraPhones.length === 0) return null
+                            return (
+                              <Tooltip
+                                label={extraPhones
+                                  .map((c) => `${c.label || 'Telefono'}: ${c.value}`)
+                                  .join('\n')}
+                              >
+                                <span className="flex-shrink-0 text-2xs px-1.5 py-0.5 rounded bg-secondary text-foreground font-semibold">
+                                  +{extraPhones.length}
+                                </span>
+                              </Tooltip>
+                            )
+                          })()}
+                        </div>
                       </td>
                       <td className="py-3 px-5">
                         {patient.patient_tags && patient.patient_tags.length > 0 ? (
@@ -486,6 +558,26 @@ export default function PatientsPage() {
                       <span>{patient.phone}</span>
                     </div>
                   )}
+                  {(patient.patient_contacts || []).map((contact) => (
+                    <div
+                      key={contact.id}
+                      className="flex items-center gap-2 text-sm text-muted-foreground"
+                    >
+                      {contact.kind === 'phone' ? (
+                        <Phone className="w-3.5 h-3.5" strokeWidth={1.85} />
+                      ) : (
+                        <Mail className="w-3.5 h-3.5" strokeWidth={1.85} />
+                      )}
+                      <span className={contact.kind === 'phone' ? 'tabular-nums' : ''}>
+                        {contact.value}
+                      </span>
+                      {contact.label && (
+                        <span className="text-2xs px-1.5 py-0.5 rounded bg-secondary text-foreground font-semibold">
+                          {contact.label}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                   {patient.patient_tags && patient.patient_tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-2">
                       {patient.patient_tags.map((tag) => (

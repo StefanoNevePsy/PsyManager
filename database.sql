@@ -163,6 +163,46 @@ create table if not exists public.patient_tag_assignments (
   unique(patient_id, tag_id)
 );
 
+-- Patient contacts (additional phone numbers and emails with custom labels)
+create table if not exists public.patient_contacts (
+  id uuid primary key default uuid_generate_v4(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  kind text not null check (kind in ('phone', 'email')),
+  label text not null default '',
+  value text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Patient family members (textual genogram)
+create table if not exists public.patient_family_members (
+  id uuid primary key default uuid_generate_v4(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  relationship text not null,
+  full_name text not null default '',
+  age integer,
+  alive boolean not null default true,
+  relationship_quality text,
+  notes text,
+  display_order integer not null default 0,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Attachments (images, SVG, PDF) for patients or clinical notes
+create table if not exists public.attachments (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  owner_type text not null check (owner_type in ('patient', 'clinical_note')),
+  owner_id uuid not null,
+  file_name text not null,
+  mime_type text not null,
+  size_bytes bigint not null,
+  storage_path text not null unique,
+  description text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Create indexes for performance
 create index if not exists patients_user_id_idx on public.patients(user_id);
 create index if not exists service_types_user_id_idx on public.service_types(user_id);
@@ -187,6 +227,11 @@ create index if not exists patient_tag_assignments_tag_id_idx on public.patient_
 create index if not exists session_series_user_id_idx on public.session_series(user_id);
 create index if not exists session_series_patient_id_idx on public.session_series(patient_id);
 create index if not exists sessions_series_id_idx on public.sessions(series_id);
+create index if not exists patient_contacts_patient_id_idx on public.patient_contacts(patient_id);
+create index if not exists patient_contacts_kind_idx on public.patient_contacts(kind);
+create index if not exists patient_family_members_patient_id_idx on public.patient_family_members(patient_id);
+create index if not exists attachments_owner_idx on public.attachments(owner_type, owner_id);
+create index if not exists attachments_user_id_idx on public.attachments(user_id);
 
 -- Enable Row Level Security
 alter table public.users enable row level security;
@@ -201,6 +246,9 @@ alter table public.clinical_notes enable row level security;
 alter table public.patient_tags enable row level security;
 alter table public.patient_tag_assignments enable row level security;
 alter table public.session_series enable row level security;
+alter table public.patient_contacts enable row level security;
+alter table public.patient_family_members enable row level security;
+alter table public.attachments enable row level security;
 
 -- Create RLS policies
 create policy "Users can view their own data" on public.users
@@ -250,6 +298,25 @@ create policy "Patient tag assignments visible to owner" on public.patient_tag_a
 create policy "Session series visible to owner" on public.session_series
   for all using (auth.uid() = user_id);
 
+create policy "Patient contacts visible to patient owner" on public.patient_contacts
+  for all using (
+    exists (
+      select 1 from public.patients p
+      where p.id = patient_id and p.user_id = auth.uid()
+    )
+  );
+
+create policy "Family members visible to patient owner" on public.patient_family_members
+  for all using (
+    exists (
+      select 1 from public.patients p
+      where p.id = patient_id and p.user_id = auth.uid()
+    )
+  );
+
+create policy "Attachments visible to owner" on public.attachments
+  for all using (auth.uid() = user_id);
+
 -- Create triggers for updated_at
 create or replace function public.update_updated_at_column()
 returns trigger as $$
@@ -287,6 +354,12 @@ create trigger patient_tags_updated_at_trigger before update on public.patient_t
   for each row execute function public.update_updated_at_column();
 
 create trigger session_series_updated_at_trigger before update on public.session_series
+  for each row execute function public.update_updated_at_column();
+
+create trigger patient_contacts_updated_at_trigger before update on public.patient_contacts
+  for each row execute function public.update_updated_at_column();
+
+create trigger patient_family_members_updated_at_trigger before update on public.patient_family_members
   for each row execute function public.update_updated_at_column();
 
 -- Auto-create a public.users row whenever a new auth.users row is created

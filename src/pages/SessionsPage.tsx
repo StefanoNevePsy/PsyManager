@@ -29,13 +29,14 @@ import {
 import SessionForm from '@/components/sessions/SessionForm'
 import CalendarView from '@/components/sessions/CalendarView'
 import SessionsList from '@/components/sessions/SessionsList'
+import WeeklyTimelineView from '@/components/sessions/WeeklyTimelineView'
 import GoogleCalendarSync from '@/components/sessions/GoogleCalendarSync'
 import { SessionFormData } from '@/lib/schemas'
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useCreatePayment } from '@/hooks/usePayments'
 
-type View = 'calendar' | 'list'
+type View = 'calendar' | 'list' | 'weekly'
 
 export default function SessionsPage() {
   const { toast } = useToast()
@@ -258,6 +259,18 @@ export default function SessionsPage() {
               <List className="w-4 h-4" strokeWidth={1.85} />
               Lista
             </button>
+            <button
+              onClick={() => setView('weekly')}
+              aria-pressed={view === 'weekly'}
+              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium transition-all ${
+                view === 'weekly'
+                  ? 'bg-card text-foreground shadow-soft'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" strokeWidth={1.85} />
+              Settimanale
+            </button>
           </div>
 
           <Button
@@ -282,6 +295,13 @@ export default function SessionsPage() {
             onDateChange={setCurrentDate}
             sessions={sessions}
             onDayClick={openCreateModal}
+            onSessionClick={openEditModal}
+          />
+        ) : view === 'weekly' ? (
+          <WeeklyTimelineView
+            currentDate={currentDate}
+            onDateChange={setCurrentDate}
+            sessions={sessions}
             onSessionClick={openEditModal}
           />
         ) : (
@@ -328,6 +348,16 @@ export default function SessionsPage() {
                   setModalOpen(false)
                   setDeleting(editing)
                   setEditing(null)
+                }
+              : undefined
+          }
+          onPay={
+            editing && editing.service_types?.type === 'private'
+              ? () => {
+                  setPayingSession(editing)
+                  setPaymentAmount(
+                    Number(editing.service_types?.price || 0).toFixed(2)
+                  )
                 }
               : undefined
           }

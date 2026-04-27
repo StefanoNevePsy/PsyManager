@@ -123,6 +123,7 @@ export type SessionFormData = z.infer<typeof sessionSchema>
 export const paymentSchema = z.object({
   patient_id: z.string().optional().or(z.literal('')),
   session_id: z.string().optional().or(z.literal('')),
+  service_type_id: z.string().optional().or(z.literal('')),
   amount: z
     .number({ message: 'Inserisci un importo valido' })
     .min(0.01, 'L\'importo deve essere maggiore di 0'),

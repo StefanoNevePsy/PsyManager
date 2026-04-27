@@ -401,6 +401,74 @@ export interface Database {
           updated_at?: string
         }
       }
+      patient_family_members: {
+        Row: {
+          id: string
+          patient_id: string
+          relationship: string
+          full_name: string
+          age: number | null
+          alive: boolean
+          relationship_quality: string | null
+          notes: string | null
+          display_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          patient_id: string
+          relationship: string
+          full_name?: string
+          age?: number | null
+          alive?: boolean
+          relationship_quality?: string | null
+          notes?: string | null
+          display_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          relationship?: string
+          full_name?: string
+          age?: number | null
+          alive?: boolean
+          relationship_quality?: string | null
+          notes?: string | null
+          display_order?: number
+          updated_at?: string
+        }
+      }
+      attachments: {
+        Row: {
+          id: string
+          user_id: string
+          owner_type: 'patient' | 'clinical_note'
+          owner_id: string
+          file_name: string
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          description: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          owner_type: 'patient' | 'clinical_note'
+          owner_id: string
+          file_name: string
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          description?: string | null
+          created_at?: string
+        }
+        Update: {
+          file_name?: string
+          description?: string | null
+        }
+      }
     }
     Views: {}
     Functions: {}

@@ -17,6 +17,7 @@ import {
 import { usePatientTags } from '@/hooks/usePatientTags'
 import { usePatientTagAssignments } from '@/hooks/usePatientTagAssignments'
 import { useReplacePatientContacts } from '@/hooks/usePatientContacts'
+import { useReplaceFamilyMembers } from '@/hooks/usePatientFamilyMembers'
 import {
   Button,
   Input,
@@ -73,6 +74,7 @@ export default function PatientsPage() {
   const { tags, createTag, updateTag, deleteTag, isCreating: isCreatingTag, isUpdating: isUpdatingTag, isDeleting: isDeletingTag } = usePatientTags()
   const { assignedTagIds: patientTagIds = [], toggleTag: togglePatientTag } = usePatientTagAssignments(assignmentPatient?.id)
   const replaceContactsMutation = useReplacePatientContacts()
+  const replaceFamilyMutation = useReplaceFamilyMembers()
 
   const handleTagSubmit = async (data: PatientTagFormData) => {
     try {
@@ -216,6 +218,20 @@ export default function PatientsPage() {
 
       // Sync additional contacts (delete removed, update existing, insert new)
       await replaceContactsMutation.mutateAsync({ patientId, contacts })
+
+      // Sync family members (textual genogram)
+      const familyMembers = (data.family_members || [])
+        .filter((m) => m.relationship && m.relationship.trim().length > 0)
+        .map((m) => ({
+          id: m.id,
+          relationship: m.relationship.trim(),
+          full_name: (m.full_name || '').trim(),
+          age: m.age ?? null,
+          alive: m.alive,
+          relationship_quality: (m.relationship_quality || '').trim() || null,
+          notes: (m.notes || '').trim() || null,
+        }))
+      await replaceFamilyMutation.mutateAsync({ patientId, members: familyMembers })
 
       setModalOpen(false)
       setEditingPatient(null)

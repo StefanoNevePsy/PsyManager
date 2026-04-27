@@ -32,10 +32,12 @@ alter table public.patient_tags enable row level security;
 alter table public.patient_tag_assignments enable row level security;
 
 -- RLS policies for patient_tags
+drop policy if exists "Patient tags visible to owner" on public.patient_tags;
 create policy "Patient tags visible to owner" on public.patient_tags
   for all using (auth.uid() = user_id);
 
 -- RLS policies for patient_tag_assignments (visible if user owns the tag)
+drop policy if exists "Patient tag assignments visible to owner" on public.patient_tag_assignments;
 create policy "Patient tag assignments visible to owner" on public.patient_tag_assignments
   for all using (
     exists (
@@ -45,5 +47,6 @@ create policy "Patient tag assignments visible to owner" on public.patient_tag_a
   );
 
 -- Triggers for updated_at
+drop trigger if exists patient_tags_updated_at_trigger on public.patient_tags;
 create trigger patient_tags_updated_at_trigger before update on public.patient_tags
   for each row execute function public.update_updated_at_column();

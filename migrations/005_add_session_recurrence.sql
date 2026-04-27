@@ -38,9 +38,11 @@ create index if not exists sessions_series_id_idx on public.sessions(series_id);
 alter table public.session_series enable row level security;
 
 -- RLS policy
+drop policy if exists "Session series visible to owner" on public.session_series;
 create policy "Session series visible to owner" on public.session_series
   for all using (auth.uid() = user_id);
 
 -- Trigger for updated_at
+drop trigger if exists session_series_updated_at_trigger on public.session_series;
 create trigger session_series_updated_at_trigger before update on public.session_series
   for each row execute function public.update_updated_at_column();

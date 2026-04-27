@@ -20,6 +20,7 @@ create index if not exists patient_contacts_kind_idx on public.patient_contacts(
 alter table public.patient_contacts enable row level security;
 
 -- RLS policy: visible if user owns the parent patient
+drop policy if exists "Patient contacts visible to patient owner" on public.patient_contacts;
 create policy "Patient contacts visible to patient owner" on public.patient_contacts
   for all using (
     exists (
@@ -29,5 +30,6 @@ create policy "Patient contacts visible to patient owner" on public.patient_cont
   );
 
 -- Trigger for updated_at
+drop trigger if exists patient_contacts_updated_at_trigger on public.patient_contacts;
 create trigger patient_contacts_updated_at_trigger before update on public.patient_contacts
   for each row execute function public.update_updated_at_column();

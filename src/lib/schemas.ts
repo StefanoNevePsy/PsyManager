@@ -67,6 +67,19 @@ export const packageAgreementSchema = z.object({
 
 export type PackageAgreementFormData = z.infer<typeof packageAgreementSchema>
 
+export const recurrenceSchema = z.object({
+  enabled: z.boolean(),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  interval_value: z.number().int().min(1).max(365),
+  interval_unit: z.enum(['day', 'week', 'month']),
+  days_of_week: z.array(z.number().int().min(0).max(6)),
+  end_type: z.enum(['count', 'until', 'never']),
+  end_count: z.number().int().min(1).max(365).optional(),
+  end_date: z.string().optional(),
+})
+
+export type RecurrenceFormData = z.infer<typeof recurrenceSchema>
+
 export const sessionSchema = z.object({
   patient_id: z.string().min(1, 'Il paziente è obbligatorio'),
   service_type_id: z.string().min(1, 'Il tipo di prestazione è obbligatorio'),
@@ -76,6 +89,7 @@ export const sessionSchema = z.object({
     .int()
     .min(1, 'La durata deve essere maggiore di 0'),
   notes: z.string().optional().or(z.literal('')),
+  recurrence: recurrenceSchema.optional(),
 })
 
 export type SessionFormData = z.infer<typeof sessionSchema>

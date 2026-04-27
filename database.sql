@@ -68,12 +68,33 @@ create table if not exists public.service_types (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Session series (defines a recurrence rule for a group of sessions)
+create table if not exists public.session_series (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  service_type_id uuid not null references public.service_types(id) on delete restrict,
+  frequency text not null check (frequency in ('weekly', 'biweekly', 'monthly', 'custom')),
+  interval_value integer not null default 1 check (interval_value > 0),
+  interval_unit text not null default 'week' check (interval_unit in ('day', 'week', 'month')),
+  days_of_week integer[] not null default '{}',
+  end_type text not null check (end_type in ('count', 'until', 'never')),
+  end_count integer check (end_count > 0),
+  end_date date,
+  start_at timestamp with time zone not null,
+  duration_minutes integer not null,
+  notes text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
 -- Sessions table
 create table if not exists public.sessions (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
   patient_id uuid not null references public.patients(id) on delete cascade,
   service_type_id uuid not null references public.service_types(id) on delete restrict,
+  series_id uuid references public.session_series(id) on delete set null,
   scheduled_at timestamp with time zone not null,
   duration_minutes integer not null,
   notes text,
@@ -163,6 +184,9 @@ create index if not exists clinical_notes_note_date_idx on public.clinical_notes
 create index if not exists patient_tags_user_id_idx on public.patient_tags(user_id);
 create index if not exists patient_tag_assignments_patient_id_idx on public.patient_tag_assignments(patient_id);
 create index if not exists patient_tag_assignments_tag_id_idx on public.patient_tag_assignments(tag_id);
+create index if not exists session_series_user_id_idx on public.session_series(user_id);
+create index if not exists session_series_patient_id_idx on public.session_series(patient_id);
+create index if not exists sessions_series_id_idx on public.sessions(series_id);
 
 -- Enable Row Level Security
 alter table public.users enable row level security;
@@ -176,6 +200,7 @@ alter table public.patient_groups enable row level security;
 alter table public.clinical_notes enable row level security;
 alter table public.patient_tags enable row level security;
 alter table public.patient_tag_assignments enable row level security;
+alter table public.session_series enable row level security;
 
 -- Create RLS policies
 create policy "Users can view their own data" on public.users
@@ -222,6 +247,9 @@ create policy "Patient tag assignments visible to owner" on public.patient_tag_a
     )
   );
 
+create policy "Session series visible to owner" on public.session_series
+  for all using (auth.uid() = user_id);
+
 -- Create triggers for updated_at
 create or replace function public.update_updated_at_column()
 returns trigger as $$
@@ -256,6 +284,9 @@ create trigger clinical_notes_updated_at_trigger before update on public.clinica
   for each row execute function public.update_updated_at_column();
 
 create trigger patient_tags_updated_at_trigger before update on public.patient_tags
+  for each row execute function public.update_updated_at_column();
+
+create trigger session_series_updated_at_trigger before update on public.session_series
   for each row execute function public.update_updated_at_column();
 
 -- Auto-create a public.users row whenever a new auth.users row is created

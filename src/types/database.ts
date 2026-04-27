@@ -154,6 +154,7 @@ export interface Database {
           user_id: string
           patient_id: string
           service_type_id: string
+          series_id?: string | null
           scheduled_at: string
           duration_minutes: number
           notes?: string
@@ -166,6 +167,7 @@ export interface Database {
           user_id: string
           patient_id: string
           service_type_id: string
+          series_id?: string | null
           scheduled_at: string
           duration_minutes: number
           notes?: string
@@ -176,10 +178,62 @@ export interface Database {
         Update: {
           patient_id?: string
           service_type_id?: string
+          series_id?: string | null
           scheduled_at?: string
           duration_minutes?: number
           notes?: string
           google_calendar_event_id?: string
+          updated_at?: string
+        }
+      }
+      session_series: {
+        Row: {
+          id: string
+          user_id: string
+          patient_id: string
+          service_type_id: string
+          frequency: 'weekly' | 'biweekly' | 'monthly' | 'custom'
+          interval_value: number
+          interval_unit: 'day' | 'week' | 'month'
+          days_of_week: number[]
+          end_type: 'count' | 'until' | 'never'
+          end_count?: number | null
+          end_date?: string | null
+          start_at: string
+          duration_minutes: number
+          notes?: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          patient_id: string
+          service_type_id: string
+          frequency: 'weekly' | 'biweekly' | 'monthly' | 'custom'
+          interval_value?: number
+          interval_unit?: 'day' | 'week' | 'month'
+          days_of_week?: number[]
+          end_type: 'count' | 'until' | 'never'
+          end_count?: number | null
+          end_date?: string | null
+          start_at: string
+          duration_minutes: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          frequency?: 'weekly' | 'biweekly' | 'monthly' | 'custom'
+          interval_value?: number
+          interval_unit?: 'day' | 'week' | 'month'
+          days_of_week?: number[]
+          end_type?: 'count' | 'until' | 'never'
+          end_count?: number | null
+          end_date?: string | null
+          start_at?: string
+          duration_minutes?: number
+          notes?: string | null
           updated_at?: string
         }
       }

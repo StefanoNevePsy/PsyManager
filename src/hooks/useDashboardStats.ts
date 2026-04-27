@@ -10,6 +10,14 @@ import {
   addDays,
 } from 'date-fns'
 
+export interface PatientBalanceLite {
+  patientId: string
+  patientName: string
+  balance: number
+  totalDue: number
+  totalPaid: number
+}
+
 export interface DashboardStats {
   activePatients: number
   monthSessions: number
@@ -19,15 +27,20 @@ export interface DashboardStats {
     id: string
     scheduled_at: string
     duration_minutes: number
+    patientId: string
     patientName: string
     serviceName: string
+    isPast: boolean
+    patientBalance: number
   }>
   upcomingSessions: Array<{
     id: string
     scheduled_at: string
     duration_minutes: number
+    patientId: string
     patientName: string
     serviceName: string
+    patientBalance: number
   }>
   recentPayments: Array<{
     id: string
@@ -35,6 +48,7 @@ export interface DashboardStats {
     payment_date: string
     patientName?: string
   }>
+  outstandingBalances: PatientBalanceLite[]
 }
 
 export const useDashboardStats = () => {
@@ -52,6 +66,7 @@ export const useDashboardStats = () => {
           todaySessions: [],
           upcomingSessions: [],
           recentPayments: [],
+          outstandingBalances: [],
         }
       }
 
@@ -72,8 +87,10 @@ export const useDashboardStats = () => {
         { data: todayData },
         { data: upcomingData },
         { data: recentPaymentsData },
+        { data: allPastSessions },
+        { data: allPayments },
       ] = await Promise.all([
-        supabase.from('patients').select('id').eq('user_id', user.id),
+        supabase.from('patients').select('id, first_name, last_name').eq('user_id', user.id),
         supabase
           .from('sessions')
           .select('id')
@@ -119,6 +136,17 @@ export const useDashboardStats = () => {
           .eq('user_id', user.id)
           .order('payment_date', { ascending: false })
           .limit(5),
+        // For balance calculation: all past sessions (private only contribute to "due")
+        supabase
+          .from('sessions')
+          .select('patient_id, service_types(price, type)')
+          .eq('user_id', user.id)
+          .lte('scheduled_at', now.toISOString()),
+        // For balance calculation: all payments
+        supabase
+          .from('payments')
+          .select('patient_id, amount')
+          .eq('user_id', user.id),
       ])
 
       const monthIncome =
@@ -138,14 +166,90 @@ export const useDashboardStats = () => {
 
       const yearProjection = Math.max(yearIncome, projectedFromSessions)
 
-      const mapSession = (s: any) => ({
+      // Build per-patient balance map
+      const balanceMap = new Map<string, { totalDue: number; totalPaid: number }>()
+      ;(allPastSessions || []).forEach((s: any) => {
+        if (s.service_types?.type !== 'private') return
+        const price = Number(s.service_types?.price || 0)
+        if (!balanceMap.has(s.patient_id)) {
+          balanceMap.set(s.patient_id, { totalDue: 0, totalPaid: 0 })
+        }
+        balanceMap.get(s.patient_id)!.totalDue += price
+      })
+      ;(allPayments || []).forEach((p: any) => {
+        if (!p.patient_id) return
+        if (!balanceMap.has(p.patient_id)) {
+          balanceMap.set(p.patient_id, { totalDue: 0, totalPaid: 0 })
+        }
+        balanceMap.get(p.patient_id)!.totalPaid += Number(p.amount)
+      })
+
+      const patientNameMap = new Map<string, string>()
+      ;(patients || []).forEach((p: any) => {
+        patientNameMap.set(p.id, `${p.last_name} ${p.first_name}`)
+      })
+
+      const getBalance = (patientId: string): number => {
+        const entry = balanceMap.get(patientId)
+        if (!entry) return 0
+        return entry.totalDue - entry.totalPaid
+      }
+
+      const outstandingBalances: PatientBalanceLite[] = Array.from(balanceMap.entries())
+        .map(([patientId, b]) => ({
+          patientId,
+          patientName: patientNameMap.get(patientId) || 'Sconosciuto',
+          balance: b.totalDue - b.totalPaid,
+          totalDue: b.totalDue,
+          totalPaid: b.totalPaid,
+        }))
+        .filter((b) => Math.abs(b.balance) >= 0.01)
+        .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
+
+      const nowMs = now.getTime()
+
+      const mapTodaySession = (s: any) => {
+        const scheduledMs = new Date(s.scheduled_at).getTime()
+        return {
+          id: s.id,
+          scheduled_at: s.scheduled_at,
+          duration_minutes: s.duration_minutes,
+          patientId: s.patient_id,
+          patientName: s.patients
+            ? `${s.patients.last_name} ${s.patients.first_name}`
+            : 'Sconosciuto',
+          serviceName: s.service_types?.name || '-',
+          isPast: scheduledMs < nowMs,
+          patientBalance: getBalance(s.patient_id),
+        }
+      }
+
+      // Order today's sessions: future first (closest to now), then past (most recent first)
+      const mappedToday = (todayData || []).map(mapTodaySession)
+      const futureToday = mappedToday
+        .filter((s) => !s.isPast)
+        .sort(
+          (a, b) =>
+            new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+        )
+      const pastToday = mappedToday
+        .filter((s) => s.isPast)
+        .sort(
+          (a, b) =>
+            new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
+        )
+      const orderedToday = [...futureToday, ...pastToday]
+
+      const mapUpcomingSession = (s: any) => ({
         id: s.id,
         scheduled_at: s.scheduled_at,
         duration_minutes: s.duration_minutes,
+        patientId: s.patient_id,
         patientName: s.patients
           ? `${s.patients.last_name} ${s.patients.first_name}`
           : 'Sconosciuto',
         serviceName: s.service_types?.name || '-',
+        patientBalance: getBalance(s.patient_id),
       })
 
       return {
@@ -153,8 +257,8 @@ export const useDashboardStats = () => {
         monthSessions: monthSessions?.length || 0,
         monthIncome,
         yearProjection,
-        todaySessions: (todayData || []).map(mapSession),
-        upcomingSessions: (upcomingData || []).map(mapSession),
+        todaySessions: orderedToday,
+        upcomingSessions: (upcomingData || []).map(mapUpcomingSession),
         recentPayments: (recentPaymentsData || []).map((p: any) => ({
           id: p.id,
           amount: Number(p.amount),
@@ -163,6 +267,7 @@ export const useDashboardStats = () => {
             ? `${p.patients.last_name} ${p.patients.first_name}`
             : undefined,
         })),
+        outstandingBalances,
       }
     },
     enabled: !!user,

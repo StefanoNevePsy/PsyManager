@@ -32,10 +32,12 @@ import CalendarView from '@/components/sessions/CalendarView'
 import SessionsList from '@/components/sessions/SessionsList'
 import WeeklyTimelineView from '@/components/sessions/WeeklyTimelineView'
 import GoogleCalendarSync from '@/components/sessions/GoogleCalendarSync'
-import { SessionFormData } from '@/lib/schemas'
+import ClinicalNoteForm from '@/components/clinical-notes/ClinicalNoteForm'
+import { SessionFormData, ClinicalNoteFormData } from '@/lib/schemas'
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useCreatePayment, usePatientBalanceMap } from '@/hooks/usePayments'
+import { useCreateClinicalNote } from '@/hooks/useClinicalNotes'
 
 type View = 'calendar' | 'list' | 'weekly'
 
@@ -50,6 +52,7 @@ export default function SessionsPage() {
   const [defaultDate, setDefaultDate] = useState<Date | undefined>()
   const [payingSession, setPayingSession] = useState<SessionWithRelations | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
+  const [diarySession, setDiarySession] = useState<SessionWithRelations | null>(null)
 
   // Handle navigation from dashboard with editSession state
   useEffect(() => {
@@ -83,6 +86,7 @@ export default function SessionsPage() {
   const convertToSeriesMutation = useConvertSessionToSeries()
   const [deleteScope, setDeleteScope] = useState<DeleteScope>('one')
   const createPaymentMutation = useCreatePayment()
+  const createNoteMutation = useCreateClinicalNote()
   const balanceMap = usePatientBalanceMap()
 
   // Compute the suggested amount for a quick payment: session price + previous debit
@@ -380,6 +384,14 @@ export default function SessionsPage() {
                 }
               : undefined
           }
+          onAddToDiary={
+            editing
+              ? () => {
+                  setDiarySession(editing)
+                  setModalOpen(false)
+                }
+              : undefined
+          }
           loading={
             createMutation.isPending ||
             updateMutation.isPending ||
@@ -604,6 +616,52 @@ export default function SessionsPage() {
           </div>
           )
         })()}
+      </Modal>
+
+      {/* Add to clinical diary modal */}
+      <Modal
+        isOpen={!!diarySession}
+        onClose={() => setDiarySession(null)}
+        title="Aggiungi al diario clinico"
+        description={
+          diarySession
+            ? `${diarySession.patients?.last_name} ${diarySession.patients?.first_name} — seduta del ${new Date(diarySession.scheduled_at).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short' })}`
+            : ''
+        }
+        size="lg"
+      >
+        {diarySession && (
+          <ClinicalNoteForm
+            defaultPatientId={diarySession.patient_id}
+            defaultSessionId={diarySession.id}
+            defaultNoteDate={(() => {
+              const d = new Date(diarySession.scheduled_at)
+              const yyyy = d.getFullYear()
+              const mm = String(d.getMonth() + 1).padStart(2, '0')
+              const dd = String(d.getDate()).padStart(2, '0')
+              return `${yyyy}-${mm}-${dd}`
+            })()}
+            onSubmit={async (data: ClinicalNoteFormData) => {
+              try {
+                await createNoteMutation.mutateAsync({
+                  patient_id: data.patient_id,
+                  session_id: data.session_id || null,
+                  title: data.title || null,
+                  content: data.content,
+                  note_date: data.note_date,
+                })
+                toast.success('Nota aggiunta al diario')
+                setDiarySession(null)
+              } catch (error) {
+                toast.error('Errore nel salvataggio', {
+                  description: error instanceof Error ? error.message : 'Riprova',
+                })
+              }
+            }}
+            onCancel={() => setDiarySession(null)}
+            loading={createNoteMutation.isPending}
+          />
+        )}
       </Modal>
     </div>
   )

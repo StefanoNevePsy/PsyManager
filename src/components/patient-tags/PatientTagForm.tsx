@@ -31,7 +31,7 @@ export default function PatientTagForm({
     defaultValues: {
       name: initialData?.name || '',
       color: initialData?.color || 'blue',
-      icon: initialData?.icon || 'tag',
+      icon: initialData?.icon || 'Tag',
     },
   })
 
@@ -39,7 +39,16 @@ export default function PatientTagForm({
   const selectedIcon = watch('icon')
   const selectedColorValue = getColorValue(selectedColor)
 
-  const IconComponent = (Icons as any)[selectedIcon] || Icons.Tag
+  const resolveIcon = (id: string) => {
+    const direct = (Icons as any)[id]
+    if (direct) return direct
+    const pascal = id
+      .split(/[-_\s]+/)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+      .join('')
+    return (Icons as any)[pascal] || Icons.Tag
+  }
+  const IconComponent = resolveIcon(selectedIcon)
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

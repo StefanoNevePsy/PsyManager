@@ -12,24 +12,29 @@ export const TAG_COLORS = [
   { id: 'slate', name: 'Grigio', hex: '#64748b', css: 'slate' },
 ] as const
 
-// Available icons for patient tags (lucide icon names)
+// Available icons for patient tags. The `id` MUST match a lucide-react named
+// export exactly (PascalCase) — TagBadge does `(Icons as any)[icon]`.
 export const TAG_ICONS = [
-  { id: 'tag', name: 'Tag' },
-  { id: 'heart', name: 'Cuore' },
-  { id: 'brain', name: 'Cervello' },
-  { id: 'shield', name: 'Scudo' },
-  { id: 'zap', name: 'Fulmine' },
-  { id: 'star', name: 'Stella' },
-  { id: 'user', name: 'Utente' },
-  { id: 'users', name: 'Utenti' },
-  { id: 'home', name: 'Casa' },
-  { id: 'work', name: 'Lavoro' },
-  { id: 'book', name: 'Libro' },
-  { id: 'alert-circle', name: 'Attenzione' },
-  { id: 'check-circle', name: 'Completato' },
-  { id: 'clock', name: 'Orologio' },
-  { id: 'trending-up', name: 'Progresso' },
-  { id: 'phone', name: 'Telefono' },
+  { id: 'Tag', name: 'Tag' },
+  { id: 'Heart', name: 'Cuore' },
+  { id: 'Brain', name: 'Cervello' },
+  { id: 'Shield', name: 'Scudo' },
+  { id: 'Zap', name: 'Fulmine' },
+  { id: 'Star', name: 'Stella' },
+  { id: 'User', name: 'Utente' },
+  { id: 'Users', name: 'Utenti' },
+  { id: 'Home', name: 'Casa' },
+  { id: 'Briefcase', name: 'Lavoro' },
+  { id: 'Book', name: 'Libro' },
+  { id: 'AlertCircle', name: 'Attenzione' },
+  { id: 'CheckCircle', name: 'Completato' },
+  { id: 'Clock', name: 'Orologio' },
+  { id: 'TrendingUp', name: 'Progresso' },
+  { id: 'Phone', name: 'Telefono' },
+  { id: 'Sparkles', name: 'Speciale' },
+  { id: 'Flag', name: 'Priorità' },
+  { id: 'Bookmark', name: 'Segnalibro' },
+  { id: 'Activity', name: 'Attività' },
 ] as const
 
 export type TagColor = (typeof TAG_COLORS)[number]['id']

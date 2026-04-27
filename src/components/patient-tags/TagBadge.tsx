@@ -10,6 +10,18 @@ interface TagBadgeProps {
   size?: 'sm' | 'md'
 }
 
+// Accepts both PascalCase ("AlertCircle") and legacy kebab/lowercase ("alert-circle", "tag")
+const resolveIcon = (id: string): React.ComponentType<{ className?: string; strokeWidth?: number }> => {
+  const direct = (Icons as any)[id]
+  if (direct) return direct
+  // Convert "alert-circle" or "alertcircle" -> "AlertCircle"
+  const pascal = id
+    .split(/[-_\s]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join('')
+  return (Icons as any)[pascal] || Icons.Tag
+}
+
 export default function TagBadge({
   name,
   color,
@@ -18,7 +30,7 @@ export default function TagBadge({
   size = 'md',
 }: TagBadgeProps) {
   const hexColor = getColorValue(color)
-  const IconComponent = (Icons as any)[icon] || Icons.Tag
+  const IconComponent = resolveIcon(icon)
   const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4'
   const padding = size === 'sm' ? 'px-2 py-0.5 text-2xs' : 'px-2.5 py-1 text-xs'
 

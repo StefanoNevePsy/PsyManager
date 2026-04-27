@@ -15,7 +15,7 @@ export default function GoogleCalendarSync() {
     initialized,
   } = useGoogleCalendarStore()
 
-  const { syncing, error: syncError, fullSync, unmappedEvents } = useGoogleCalendarSync()
+  const { syncing, syncProgress, error: syncError, fullSync, unmappedEvents } = useGoogleCalendarSync()
 
   useEffect(() => {
     if (!initialized) {
@@ -70,6 +70,27 @@ export default function GoogleCalendarSync() {
           </Button>
         )}
       </div>
+
+      {syncing && syncProgress && syncProgress.total > 0 && (
+        <div className="bg-secondary/50 p-3 rounded-lg text-sm">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-muted-foreground">
+              Sincronizzazione in corso...
+            </span>
+            <span className="tabular-nums font-medium">
+              {syncProgress.current} / {syncProgress.total}
+            </span>
+          </div>
+          <div className="h-1.5 bg-border rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all"
+              style={{
+                width: `${syncProgress.total > 0 ? (syncProgress.current / syncProgress.total) * 100 : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 bg-destructive/10 text-destructive p-3 rounded-lg text-sm">

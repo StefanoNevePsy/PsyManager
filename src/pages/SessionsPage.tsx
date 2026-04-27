@@ -34,7 +34,7 @@ import GoogleCalendarSync from '@/components/sessions/GoogleCalendarSync'
 import { SessionFormData } from '@/lib/schemas'
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
-import { useCreatePayment } from '@/hooks/usePayments'
+import { useCreatePayment, usePatientBalanceMap } from '@/hooks/usePayments'
 
 type View = 'calendar' | 'list' | 'weekly'
 
@@ -70,6 +70,16 @@ export default function SessionsPage() {
   const convertToSeriesMutation = useConvertSessionToSeries()
   const [deleteScope, setDeleteScope] = useState<DeleteScope>('one')
   const createPaymentMutation = useCreatePayment()
+  const balanceMap = usePatientBalanceMap()
+
+  // Compute the suggested amount for a quick payment: session price + previous debit
+  // (or session price - previous credit). The previous balance is the patient's
+  // balance BEFORE this session is paid.
+  const computeSuggestedAmount = (session: SessionWithRelations): number => {
+    const sessionPrice = Number(session.service_types?.price || 0)
+    const previousBalance = balanceMap.get(session.patient_id) || 0
+    return Math.max(0, sessionPrice + previousBalance)
+  }
 
   const { isConnected } = useGoogleCalendarStore()
   const { pushSessionToCalendar, removeSessionFromCalendar } =
@@ -311,9 +321,7 @@ export default function SessionsPage() {
             onDelete={openDeleteDialog}
             onPay={(session) => {
               setPayingSession(session)
-              setPaymentAmount(
-                Number(session.service_types?.price || 0).toFixed(2)
-              )
+              setPaymentAmount(computeSuggestedAmount(session).toFixed(2))
             }}
             emptyTitle="Nessuna seduta in programma"
             emptyDescription="Aggiungi la tua prima seduta per iniziare"
@@ -355,9 +363,7 @@ export default function SessionsPage() {
             editing && editing.service_types?.type === 'private'
               ? () => {
                   setPayingSession(editing)
-                  setPaymentAmount(
-                    Number(editing.service_types?.price || 0).toFixed(2)
-                  )
+                  setPaymentAmount(computeSuggestedAmount(editing).toFixed(2))
                 }
               : undefined
           }
@@ -485,21 +491,58 @@ export default function SessionsPage() {
         }
         size="md"
       >
-        {payingSession && (
+        {payingSession && (() => {
+          const sessionPrice = Number(payingSession.service_types?.price || 0)
+          const previousBalance = balanceMap.get(payingSession.patient_id) || 0
+          const suggested = Math.max(0, sessionPrice + previousBalance)
+          const isDebit = previousBalance > 0
+          const isCredit = previousBalance < 0
+          return (
           <div className="space-y-4">
+            {/* Session price */}
             <div className="p-3 bg-secondary/50 rounded-md">
-              <p className="text-xs text-muted-foreground">Importo pattuito</p>
-              <p className="text-lg font-semibold">
-                €{Number(payingSession.service_types?.price || 0).toFixed(2)}
+              <p className="text-xs text-muted-foreground">Importo pattuito (questa seduta)</p>
+              <p className="text-lg font-semibold tabular-nums">
+                € {sessionPrice.toFixed(2)}
               </p>
             </div>
+
+            {/* Previous balance */}
+            {Math.abs(previousBalance) >= 0.01 && (
+              <div
+                className={`p-3 rounded-md border ${
+                  isDebit
+                    ? 'bg-destructive/10 border-destructive/20 text-destructive'
+                    : 'bg-success/10 border-success/20 text-success'
+                }`}
+              >
+                <p className="text-xs font-medium opacity-80">
+                  {isDebit ? 'Debito da sedute precedenti' : 'Credito da sedute precedenti'}
+                </p>
+                <p className="text-lg font-semibold tabular-nums">
+                  {isDebit ? '+' : '−'} € {Math.abs(previousBalance).toFixed(2)}
+                </p>
+              </div>
+            )}
+
+            {/* Suggested total */}
+            {(isDebit || isCredit) && (
+              <div className="p-3 bg-primary-soft text-primary rounded-md border border-primary/20">
+                <p className="text-xs font-medium opacity-80">
+                  {isDebit ? 'Totale suggerito (seduta + debito)' : 'Totale suggerito (seduta − credito)'}
+                </p>
+                <p className="text-xl font-semibold tabular-nums">
+                  € {suggested.toFixed(2)}
+                </p>
+              </div>
+            )}
 
             <Input
               label="Importo pagato"
               type="number"
               step="0.01"
               min="0"
-              placeholder="Lascia vuoto per importo pattuito"
+              placeholder="Lascia vuoto per importo suggerito"
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
             />
@@ -521,7 +564,7 @@ export default function SessionsPage() {
                     const amount =
                       paymentAmount && paymentAmount.trim()
                         ? Number(paymentAmount)
-                        : Number(payingSession.service_types?.price || 0)
+                        : suggested
 
                     await createPaymentMutation.mutateAsync({
                       patient_id: payingSession.patient_id,
@@ -546,7 +589,8 @@ export default function SessionsPage() {
               </Button>
             </div>
           </div>
-        )}
+          )
+        })()}
       </Modal>
     </div>
   )

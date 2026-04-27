@@ -178,6 +178,22 @@ export const usePatientBalances = () => {
         }
       }
 
+      // Also include patients who only have payments but no completed sessions —
+      // their balance is a credit (negative).
+      for (const payment of payments || []) {
+        if (!payment.patient_id) continue
+        if (!balances.has(payment.patient_id)) {
+          balances.set(payment.patient_id, {
+            patientId: payment.patient_id,
+            patientName: '',
+            totalDue: 0,
+            totalPaid: Number(payment.amount),
+            balance: 0,
+            sessionsCount: 0,
+          })
+        }
+      }
+
       const result = Array.from(balances.values()).map((b) => ({
         ...b,
         balance: b.totalDue - b.totalPaid,
@@ -187,4 +203,15 @@ export const usePatientBalances = () => {
     },
     enabled: !!user,
   })
+}
+
+/**
+ * Returns a Map<patientId, balance> for fast lookup. Positive = patient owes money,
+ * negative = credit. Use this from session views to show colored balance indicators.
+ */
+export const usePatientBalanceMap = () => {
+  const { data = [] } = usePatientBalances()
+  const map = new Map<string, number>()
+  for (const b of data) map.set(b.patientId, b.balance)
+  return map
 }

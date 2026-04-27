@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
+import { usePatientBalanceMap } from '@/hooks/usePayments'
 
 interface Props {
   currentDate: Date
@@ -28,6 +29,7 @@ export default function WeeklyTimelineView({
   sessions,
   onSessionClick,
 }: Props) {
+  const balanceMap = usePatientBalanceMap()
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
@@ -162,8 +164,19 @@ export default function WeeklyTimelineView({
                             {format(new Date(session.scheduled_at), 'HH:mm')}—
                             {format(end, 'HH:mm')}
                           </div>
-                          <div className="text-2xs opacity-90 truncate leading-tight">
+                          <div className="text-2xs opacity-90 truncate leading-tight flex items-center gap-1">
                             {session.patients?.last_name}
+                            {(() => {
+                              const bal = balanceMap.get(session.patient_id) || 0
+                              if (Math.abs(bal) < 0.01) return null
+                              return (
+                                <span
+                                  className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                    bal > 0 ? 'bg-destructive' : 'bg-success'
+                                  }`}
+                                />
+                              )
+                            })()}
                           </div>
                           <div className="text-2xs opacity-75 truncate leading-tight">
                             {session.service_types?.name}

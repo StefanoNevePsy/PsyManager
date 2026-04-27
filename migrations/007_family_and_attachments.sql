@@ -19,6 +19,7 @@ create index if not exists patient_family_members_patient_id_idx on public.patie
 
 alter table public.patient_family_members enable row level security;
 
+drop policy if exists "Family members visible to patient owner" on public.patient_family_members;
 create policy "Family members visible to patient owner" on public.patient_family_members
   for all using (
     exists (
@@ -27,6 +28,7 @@ create policy "Family members visible to patient owner" on public.patient_family
     )
   );
 
+drop trigger if exists patient_family_members_updated_at_trigger on public.patient_family_members;
 create trigger patient_family_members_updated_at_trigger before update on public.patient_family_members
   for each row execute function public.update_updated_at_column();
 
@@ -49,6 +51,7 @@ create index if not exists attachments_user_id_idx on public.attachments(user_id
 
 alter table public.attachments enable row level security;
 
+drop policy if exists "Attachments visible to owner" on public.attachments;
 create policy "Attachments visible to owner" on public.attachments
   for all using (auth.uid() = user_id);
 

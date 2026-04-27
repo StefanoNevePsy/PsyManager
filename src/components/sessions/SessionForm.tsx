@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Repeat, ChevronDown } from 'lucide-react'
+import { Repeat, ChevronDown, Info } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
@@ -97,6 +97,10 @@ export default function SessionForm({
 
   const recurrenceEnabled = recurrence?.enabled === true
   const isEditing = !!initialData
+  const isPartOfSeries = !!initialData?.series_id
+  // Recurrence section is shown when creating a new session OR when editing a
+  // session that's not yet part of a series (so the user can convert it).
+  const showRecurrenceSection = !isEditing || !isPartOfSeries
 
   // Live preview of occurrences
   const occurrencesPreview = (() => {
@@ -182,8 +186,22 @@ export default function SessionForm({
         error={errors.notes?.message}
       />
 
-      {/* Recurrence section - only for new sessions */}
-      {!isEditing && (
+      {/* Banner for sessions already part of a recurring series */}
+      {isPartOfSeries && (
+        <div className="flex items-start gap-2 p-3 rounded-md border border-border bg-secondary/40 text-sm">
+          <Info className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" strokeWidth={2} />
+          <div>
+            <p className="font-medium text-foreground">Parte di una serie ricorrente</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Le modifiche qui valgono solo per questa occorrenza. Per cambiare la
+              ricorrenza, elimina le occorrenze future dal pulsante elimina e ricreale.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Recurrence section: shown for new sessions and for existing non-recurring sessions */}
+      {showRecurrenceSection && (
         <div className="border-t border-border pt-4">
           <button
             type="button"
@@ -191,7 +209,7 @@ export default function SessionForm({
             className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors"
           >
             <Repeat className="w-4 h-4" strokeWidth={2} />
-            Ripeti questa seduta
+            {isEditing ? 'Trasforma in ricorrente' : 'Ripeti questa seduta'}
             {recurrenceEnabled && (
               <span className="text-2xs px-1.5 py-0.5 rounded bg-primary-soft text-primary font-semibold uppercase tracking-wider">
                 Attiva
@@ -392,7 +410,13 @@ export default function SessionForm({
           loading={loading}
           disabled={patients.length === 0 || serviceTypes.length === 0}
         >
-          {initialData ? 'Aggiorna' : recurrenceEnabled ? 'Crea sedute' : 'Crea'}
+          {initialData
+            ? recurrenceEnabled
+              ? 'Aggiorna e crea ricorrenza'
+              : 'Aggiorna'
+            : recurrenceEnabled
+              ? 'Crea sedute'
+              : 'Crea'}
         </Button>
       </div>
     </form>

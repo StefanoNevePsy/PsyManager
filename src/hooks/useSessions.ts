@@ -188,6 +188,119 @@ export const useUpdateSession = () => {
   })
 }
 
+/**
+ * Convert a single existing session into a recurring series.
+ *
+ * Strategy: keep the original session as the FIRST occurrence (just attach the
+ * new series_id to it), then bulk-insert the additional future occurrences.
+ * This preserves any payments/calendar links already attached to the original.
+ */
+export const useConvertSessionToSeries = () => {
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      patientId,
+      serviceTypeId,
+      scheduledAt,
+      durationMinutes,
+      notes,
+      recurrence,
+    }: {
+      sessionId: string
+      patientId: string
+      serviceTypeId: string
+      scheduledAt: string
+      durationMinutes: number
+      notes?: string | null
+      recurrence: RecurrenceFormData
+    }) => {
+      if (!user) throw new Error('Not authenticated')
+      if (!recurrence.enabled) throw new Error('Recurrence not enabled')
+
+      const startAt = new Date(scheduledAt)
+      const occurrences = generateOccurrences({
+        startAt,
+        recurrence: {
+          frequency: recurrence.frequency,
+          interval_value: recurrence.interval_value,
+          interval_unit: recurrence.interval_unit,
+          days_of_week: recurrence.days_of_week,
+          end_type: recurrence.end_type,
+          end_count: recurrence.end_count,
+          end_date: recurrence.end_date,
+        },
+      })
+      if (occurrences.length === 0) throw new Error('Nessuna occorrenza generata')
+
+      const seriesPayload: Omit<SessionSeriesInsert, 'user_id'> & { user_id: string } = {
+        user_id: user.id,
+        patient_id: patientId,
+        service_type_id: serviceTypeId,
+        frequency: recurrence.frequency,
+        interval_value: recurrence.interval_value,
+        interval_unit: recurrence.interval_unit,
+        days_of_week: recurrence.days_of_week,
+        end_type: recurrence.end_type,
+        end_count: recurrence.end_count ?? null,
+        end_date: recurrence.end_date || null,
+        start_at: scheduledAt,
+        duration_minutes: durationMinutes,
+        notes: notes ?? null,
+      }
+
+      const { data: series, error: seriesError } = await supabase
+        .from('session_series')
+        .insert(seriesPayload)
+        .select()
+        .single()
+
+      if (seriesError) throw seriesError
+
+      // Update the original session: link it to the new series + apply edited fields
+      const { error: updateError } = await supabase
+        .from('sessions')
+        .update({
+          patient_id: patientId,
+          service_type_id: serviceTypeId,
+          scheduled_at: scheduledAt,
+          duration_minutes: durationMinutes,
+          notes: notes ?? undefined,
+          series_id: series.id,
+        })
+        .eq('id', sessionId)
+
+      if (updateError) throw updateError
+
+      // Skip the first occurrence (== original session) and insert the rest
+      const rest = occurrences.slice(1)
+      if (rest.length > 0) {
+        const sessionsToInsert = rest.map((occurrence) => ({
+          user_id: user.id,
+          patient_id: patientId,
+          service_type_id: serviceTypeId,
+          series_id: series.id,
+          scheduled_at: occurrence.toISOString(),
+          duration_minutes: durationMinutes,
+          notes: notes ?? undefined,
+        }))
+        const { error: insertError } = await supabase
+          .from('sessions')
+          .insert(sessionsToInsert)
+        if (insertError) throw insertError
+      }
+
+      return { occurrencesCount: occurrences.length }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['session'] })
+    },
+  })
+}
+
 export const useDeleteSession = () => {
   const queryClient = useQueryClient()
 

@@ -14,38 +14,75 @@ export interface PatientWithTags extends Patient {
   patient_contacts?: PatientContact[]
 }
 
+/**
+ * Fetch patients with tags and contacts joined CLIENT-SIDE.
+ *
+ * Why not a single nested PostgREST query? We tried `select('*, patient_tag_assignments(patient_tags(*)), patient_contacts(*)')`
+ * but it fails entirely if any of the joined relations have a missing FK in the
+ * PostgREST schema cache or any RLS edge case — and one bad join takes down the
+ * whole patient list. With separate queries, a failure in tags/contacts only
+ * makes those fields empty; the patient list still loads.
+ */
 export const usePatients = () => {
   const { user } = useAuth()
 
   return useQuery({
     queryKey: ['patients', user?.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<PatientWithTags[]> => {
       if (!user) return []
-      const { data, error } = await supabase
+
+      // Always-required base query
+      const { data: patients, error } = await supabase
         .from('patients')
-        .select(
-          `
-          *,
-          patient_tag_assignments(
-            patient_tags(id, user_id, name, color, icon, created_at, updated_at)
-          ),
-          patient_contacts(*)
-        `
-        )
+        .select('*')
         .eq('user_id', user.id)
         .order('last_name', { ascending: true })
 
       if (error) throw error
+      if (!patients || patients.length === 0) return []
 
-      // Transform the nested structure
-      const patients = (data as any[]).map((p) => ({
+      const patientIds = patients.map((p: any) => p.id)
+
+      // Side queries — failures are non-fatal (we just lose the extras).
+      const [contactsRes, assignmentsRes, tagsRes] = await Promise.all([
+        supabase
+          .from('patient_contacts')
+          .select('*')
+          .in('patient_id', patientIds),
+        supabase
+          .from('patient_tag_assignments')
+          .select('patient_id, tag_id')
+          .in('patient_id', patientIds),
+        supabase
+          .from('patient_tags')
+          .select('*')
+          .eq('user_id', user.id),
+      ])
+
+      const contactsByPatient = new Map<string, PatientContact[]>()
+      ;(contactsRes.data || []).forEach((c: any) => {
+        const list = contactsByPatient.get(c.patient_id) || []
+        list.push(c)
+        contactsByPatient.set(c.patient_id, list)
+      })
+
+      const tagsById = new Map<string, PatientTag>()
+      ;(tagsRes.data || []).forEach((t: any) => tagsById.set(t.id, t))
+
+      const tagsByPatient = new Map<string, PatientTag[]>()
+      ;(assignmentsRes.data || []).forEach((a: any) => {
+        const tag = tagsById.get(a.tag_id)
+        if (!tag) return
+        const list = tagsByPatient.get(a.patient_id) || []
+        list.push(tag)
+        tagsByPatient.set(a.patient_id, list)
+      })
+
+      return (patients as Patient[]).map((p) => ({
         ...p,
-        patient_tags: p.patient_tag_assignments
-          ?.map((a: any) => a.patient_tags)
-          .filter((t: any) => t !== null) || [],
+        patient_contacts: contactsByPatient.get(p.id) || [],
+        patient_tags: tagsByPatient.get(p.id) || [],
       }))
-
-      return patients as PatientWithTags[]
     },
     enabled: !!user,
   })
@@ -54,31 +91,38 @@ export const usePatients = () => {
 export const usePatient = (id: string | undefined) => {
   return useQuery({
     queryKey: ['patient', id],
-    queryFn: async () => {
+    queryFn: async (): Promise<PatientWithTags | null> => {
       if (!id) return null
-      const { data, error } = await supabase
+
+      const { data: patient, error } = await supabase
         .from('patients')
-        .select(
-          `
-          *,
-          patient_tag_assignments(
-            patient_tags(id, user_id, name, color, icon, created_at, updated_at)
-          ),
-          patient_contacts(*)
-        `
-        )
+        .select('*')
         .eq('id', id)
         .single()
 
       if (error) throw error
+      if (!patient) return null
 
-      const patient = data as any
+      const [contactsRes, assignmentsRes] = await Promise.all([
+        supabase.from('patient_contacts').select('*').eq('patient_id', id),
+        supabase.from('patient_tag_assignments').select('tag_id').eq('patient_id', id),
+      ])
+
+      const tagIds = (assignmentsRes.data || []).map((a: any) => a.tag_id)
+      let tags: PatientTag[] = []
+      if (tagIds.length > 0) {
+        const { data: tagsData } = await supabase
+          .from('patient_tags')
+          .select('*')
+          .in('id', tagIds)
+        tags = (tagsData || []) as PatientTag[]
+      }
+
       return {
-        ...patient,
-        patient_tags: patient.patient_tag_assignments
-          ?.map((a: any) => a.patient_tags)
-          .filter((t: any) => t !== null) || [],
-      } as PatientWithTags
+        ...(patient as Patient),
+        patient_contacts: (contactsRes.data || []) as PatientContact[],
+        patient_tags: tags,
+      }
     },
     enabled: !!id,
   })

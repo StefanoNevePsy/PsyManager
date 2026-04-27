@@ -3,6 +3,7 @@ import { it } from 'date-fns/locale'
 import { Clock, User, Edit, Trash2, Calendar } from 'lucide-react'
 import { Button, EmptyState } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
+import { getServiceColor } from '@/lib/serviceColors'
 
 interface Props {
   sessions: SessionWithRelations[]
@@ -58,10 +59,13 @@ export default function SessionsList({
               {isToday && ' (oggi)'}
             </h3>
             <div className="space-y-2">
-              {daySessions.map((session) => (
+              {daySessions.map((session) => {
+                const color = getServiceColor(session.service_type_id)
+                return (
                 <div
                   key={session.id}
-                  className="border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors"
+                  className="border-l-4 border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors"
+                  style={{ borderLeftColor: color.hex }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -82,11 +86,8 @@ export default function SessionsList({
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            session.service_types?.type === 'private'
-                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                              : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                          }`}
+                          className="text-xs font-medium px-2 py-0.5 rounded-full border"
+                          style={color.pillStyle}
                         >
                           {session.service_types?.name}
                         </span>
@@ -120,7 +121,8 @@ export default function SessionsList({
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )

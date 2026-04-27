@@ -14,6 +14,7 @@ import { it } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
+import { getServiceColor } from '@/lib/serviceColors'
 
 interface Props {
   currentDate: Date
@@ -108,21 +109,34 @@ export default function CalendarView({
                 </div>
 
                 <div className="space-y-1">
-                  {daySessions.slice(0, 3).map((session) => (
-                    <div
-                      key={session.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onSessionClick(session)
-                      }}
-                      className="text-xs bg-primary/10 text-primary px-1 py-0.5 rounded truncate hover:bg-primary/20 cursor-pointer"
-                    >
-                      <span className="font-medium">
-                        {format(new Date(session.scheduled_at), 'HH:mm')}
-                      </span>{' '}
-                      {session.patients?.last_name}
-                    </div>
-                  ))}
+                  {daySessions.slice(0, 3).map((session) => {
+                    const color = getServiceColor(session.service_type_id)
+                    return (
+                      <div
+                        key={session.id}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onSessionClick(session)
+                        }}
+                        title={session.service_types?.name}
+                        className="text-xs px-1 py-0.5 rounded truncate cursor-pointer border transition-colors"
+                        style={color.pillStyle}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            color.pillHoverStyle.backgroundColor
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            color.pillStyle.backgroundColor
+                        }}
+                      >
+                        <span className="font-medium">
+                          {format(new Date(session.scheduled_at), 'HH:mm')}
+                        </span>{' '}
+                        {session.patients?.last_name}
+                      </div>
+                    )
+                  })}
                   {daySessions.length > 3 && (
                     <div className="text-xs text-muted-foreground">
                       +{daySessions.length - 3} altre

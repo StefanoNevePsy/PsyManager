@@ -12,6 +12,7 @@ import {
   useUpdateSession,
   useDeleteSession,
   useDeleteSessionScoped,
+  useConvertSessionToSeries,
   SessionWithRelations,
   DeleteScope,
 } from '@/hooks/useSessions'
@@ -61,6 +62,7 @@ export default function SessionsPage() {
   const updateMutation = useUpdateSession()
   const deleteMutation = useDeleteSession()
   const deleteScopedMutation = useDeleteSessionScoped()
+  const convertToSeriesMutation = useConvertSessionToSeries()
   const [deleteScope, setDeleteScope] = useState<DeleteScope>('one')
 
   const { isConnected } = useGoogleCalendarStore()
@@ -91,26 +93,46 @@ export default function SessionsPage() {
       }
 
       if (editing) {
-        const savedSession = await updateMutation.mutateAsync({
-          id: editing.id,
-          updates: {
-            patient_id: cleanData.patient_id,
-            service_type_id: cleanData.service_type_id,
-            scheduled_at: cleanData.scheduled_at,
-            duration_minutes: cleanData.duration_minutes,
-            notes: cleanData.notes,
-          },
-        })
-        toast.success('Seduta aggiornata')
+        // If the user enabled recurrence on an existing non-recurring session,
+        // convert it into a series (keeps the original as the first occurrence).
+        const isConvertingToSeries =
+          !editing.series_id && data.recurrence?.enabled === true
 
-        if (isConnected() && savedSession) {
-          try {
-            await pushSessionToCalendar(savedSession as SessionWithRelations)
-            toast.info('Sincronizzata su Google Calendar')
-          } catch (err) {
-            toast.warning('Salvata, ma sync Calendar fallita', {
-              description: err instanceof Error ? err.message : 'Riprova dalle Impostazioni',
-            })
+        if (isConvertingToSeries && data.recurrence) {
+          const result = await convertToSeriesMutation.mutateAsync({
+            sessionId: editing.id,
+            patientId: cleanData.patient_id,
+            serviceTypeId: cleanData.service_type_id,
+            scheduledAt: cleanData.scheduled_at,
+            durationMinutes: cleanData.duration_minutes,
+            notes: cleanData.notes,
+            recurrence: data.recurrence,
+          })
+          toast.success(`${result.occurrencesCount} sedute pianificate`, {
+            description: 'La seduta originale è ora la prima della serie',
+          })
+        } else {
+          const savedSession = await updateMutation.mutateAsync({
+            id: editing.id,
+            updates: {
+              patient_id: cleanData.patient_id,
+              service_type_id: cleanData.service_type_id,
+              scheduled_at: cleanData.scheduled_at,
+              duration_minutes: cleanData.duration_minutes,
+              notes: cleanData.notes,
+            },
+          })
+          toast.success('Seduta aggiornata')
+
+          if (isConnected() && savedSession) {
+            try {
+              await pushSessionToCalendar(savedSession as SessionWithRelations)
+              toast.info('Sincronizzata su Google Calendar')
+            } catch (err) {
+              toast.warning('Salvata, ma sync Calendar fallita', {
+                description: err instanceof Error ? err.message : 'Riprova dalle Impostazioni',
+              })
+            }
           }
         }
       } else {
@@ -289,7 +311,11 @@ export default function SessionsPage() {
             setEditing(null)
             setDefaultDate(undefined)
           }}
-          loading={createMutation.isPending || updateMutation.isPending}
+          loading={
+            createMutation.isPending ||
+            updateMutation.isPending ||
+            convertToSeriesMutation.isPending
+          }
         />
       </Modal>
 

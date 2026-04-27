@@ -127,10 +127,12 @@ export const usePatientBalances = () => {
     queryFn: async () => {
       if (!user) return []
 
+      const now = new Date()
       const { data: sessions, error: sessionsError } = await supabase
         .from('sessions')
         .select('*, patients(*), service_types(*)')
         .eq('user_id', user.id)
+        .lte('scheduled_at', now.toISOString())
 
       if (sessionsError) throw sessionsError
 
@@ -142,10 +144,16 @@ export const usePatientBalances = () => {
       if (paymentsError) throw paymentsError
 
       const balances = new Map<string, PatientBalance>()
+      const nowMs = now.getTime()
 
       for (const session of sessions || []) {
         if (!session.patients || !session.service_types) continue
         if (session.service_types.type !== 'private') continue
+
+        // Only count if session has ENDED (scheduled_at + duration < now)
+        const sessionStart = new Date(session.scheduled_at).getTime()
+        const sessionEnd = sessionStart + (session.duration_minutes * 60 * 1000)
+        if (sessionEnd > nowMs) continue
 
         const patientId = session.patient_id
         const existing = balances.get(patientId) || {

@@ -1,8 +1,10 @@
-import { useForm } from 'react-hook-form'
+import { useEffect } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { paymentSchema, PaymentFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
+import { useServiceTypes } from '@/hooks/useServiceTypes'
 import { Database } from '@/types/database'
 
 type Payment = Database['public']['Tables']['payments']['Row']
@@ -23,11 +25,14 @@ export default function PaymentForm({
   loading = false,
 }: Props) {
   const { data: patients = [] } = usePatients()
+  const { data: serviceTypes = [] } = useServiceTypes()
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
+    control,
   } = useForm<PaymentFormData>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
@@ -37,8 +42,21 @@ export default function PaymentForm({
         initialData?.payment_date || new Date().toISOString().split('T')[0],
       payment_method: (initialData?.payment_method as PaymentFormData['payment_method']) || 'cash',
       notes: initialData?.notes || '',
+      service_type_id: '',
     },
   })
+
+  const selectedServiceTypeId = useWatch({ control, name: 'service_type_id' })
+
+  // Auto-fill amount from service type price
+  useEffect(() => {
+    if (selectedServiceTypeId) {
+      const st = serviceTypes.find((s) => s.id === selectedServiceTypeId)
+      if (st) {
+        setValue('amount', Number(st.price))
+      }
+    }
+  }, [selectedServiceTypeId, serviceTypes, setValue])
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -53,6 +71,22 @@ export default function PaymentForm({
             value: p.id,
             label: `${p.last_name} ${p.first_name}`,
           })),
+        ]}
+      />
+
+      <Select
+        id="service_type_id"
+        label="Prestazione (per autofill importo)"
+        {...register('service_type_id')}
+        error={errors.service_type_id?.message}
+        options={[
+          { value: '', label: 'Nessuna prestazione...' },
+          ...serviceTypes
+            .filter((s) => s.type === 'private')
+            .map((s) => ({
+              value: s.id,
+              label: `${s.name} (€${Number(s.price).toFixed(2)})`,
+            })),
         ]}
       />
 

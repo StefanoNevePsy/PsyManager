@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Repeat, ChevronDown, Info } from 'lucide-react'
+import { Repeat, ChevronDown, Info, DollarSign } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
@@ -17,6 +17,7 @@ interface Props {
   onSubmit: (data: SessionFormData) => void | Promise<void>
   onCancel: () => void
   onDelete?: () => void
+  onPay?: () => void
   loading?: boolean
 }
 
@@ -45,6 +46,7 @@ export default function SessionForm({
   onSubmit,
   onCancel,
   onDelete,
+  onPay,
   loading = false,
 }: Props) {
   const { data: patients = [] } = usePatients()
@@ -417,6 +419,17 @@ export default function SessionForm({
           )}
         </div>
         <div className="flex gap-2">
+          {initialData && onPay && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onPay}
+              disabled={loading}
+            >
+              <DollarSign className="w-4 h-4" />
+              Pagamento
+            </Button>
+          )}
           <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
             Annulla
           </Button>

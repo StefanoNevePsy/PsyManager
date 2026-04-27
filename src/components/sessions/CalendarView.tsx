@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
+import { usePatientBalanceMap } from '@/hooks/usePayments'
 
 interface Props {
   currentDate: Date
@@ -31,6 +32,7 @@ export default function CalendarView({
   onDayClick,
   onSessionClick,
 }: Props) {
+  const balanceMap = usePatientBalanceMap()
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 })
@@ -134,6 +136,17 @@ export default function CalendarView({
                           {format(new Date(session.scheduled_at), 'HH:mm')}
                         </span>{' '}
                         {session.patients?.last_name}
+                        {(() => {
+                          const bal = balanceMap.get(session.patient_id) || 0
+                          if (Math.abs(bal) < 0.01) return null
+                          return (
+                            <span
+                              className={`inline-block w-1.5 h-1.5 rounded-full ml-1 align-middle ${
+                                bal > 0 ? 'bg-destructive' : 'bg-success'
+                              }`}
+                            />
+                          )
+                        })()}
                       </div>
                     )
                   })}

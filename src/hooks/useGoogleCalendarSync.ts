@@ -13,12 +13,28 @@ import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './useAuth'
 
+// Sync window: ±N days from today. Limits the number of operations.
+const SYNC_DAYS_PAST = 90
+const SYNC_DAYS_FUTURE = 180
+const PARALLEL_BATCH_SIZE = 5
+const MAX_OPERATIONS = 500
+
 export const useGoogleCalendarSync = () => {
   const { isConnected } = useGoogleCalendarStore()
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const { data: sessions = [] } = useSessions()
+
+  // Limit the sessions we operate on to a sane window —
+  // an infinite recurrence could otherwise generate thousands of sessions
+  // and the loop below would never finish.
+  const syncStart = new Date()
+  syncStart.setDate(syncStart.getDate() - SYNC_DAYS_PAST)
+  const syncEnd = new Date()
+  syncEnd.setDate(syncEnd.getDate() + SYNC_DAYS_FUTURE)
+
+  const { data: sessions = [] } = useSessions(syncStart, syncEnd)
   const [syncing, setSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [unmappedEvents, setUnmappedEvents] = useState<GoogleCalendarEvent[]>([])
 
@@ -74,16 +90,36 @@ export const useGoogleCalendarSync = () => {
     [isConnected]
   )
 
+  /**
+   * Run async operations in batches of PARALLEL_BATCH_SIZE for throughput
+   * without overwhelming the Google Calendar API rate limits.
+   */
+  const runInBatches = async <T,>(
+    items: T[],
+    op: (item: T) => Promise<unknown>,
+    onProgress?: (done: number, total: number) => void
+  ) => {
+    let done = 0
+    for (let i = 0; i < items.length; i += PARALLEL_BATCH_SIZE) {
+      const batch = items.slice(i, i + PARALLEL_BATCH_SIZE)
+      await Promise.allSettled(batch.map(op))
+      done += batch.length
+      onProgress?.(done, items.length)
+    }
+  }
+
   const fullSync = useCallback(
-    async (timeMin?: Date, timeMax?: Date) => {
+    async () => {
       if (!isConnected() || !user) return
 
       setSyncing(true)
       setError(null)
       setUnmappedEvents([])
+      setSyncProgress({ current: 0, total: 0 })
 
       try {
-        const events = await listEvents('primary', timeMin, timeMax)
+        // Use the same window for Google events
+        const events = await listEvents('primary', syncStart, syncEnd)
 
         const sessionMap = new Map(
           sessions
@@ -92,6 +128,7 @@ export const useGoogleCalendarSync = () => {
         )
 
         const unmapped: GoogleCalendarEvent[] = []
+        const sessionsToUpdate: Array<{ id: string; scheduled_at: string; duration_minutes: number }> = []
 
         for (const event of events) {
           if (!event.id) continue
@@ -113,26 +150,49 @@ export const useGoogleCalendarSync = () => {
               newScheduledAt !== existingSession.scheduled_at ||
               newDuration !== existingSession.duration_minutes
             ) {
-              await supabase
-                .from('sessions')
-                .update({
-                  scheduled_at: newScheduledAt,
-                  duration_minutes: newDuration,
-                })
-                .eq('id', existingSession.id)
+              sessionsToUpdate.push({
+                id: existingSession.id,
+                scheduled_at: newScheduledAt,
+                duration_minutes: newDuration,
+              })
             }
           } else if (meta?.appId === 'psymanager' && meta.sessionId) {
+            // Already known — skip
             continue
           } else if (event.start.dateTime) {
             unmapped.push(event)
           }
         }
 
-        for (const session of sessions) {
-          if (!session.google_calendar_event_id) {
-            await pushSessionToCalendar(session)
-          }
+        // Apply pulled changes to Supabase in parallel
+        if (sessionsToUpdate.length > 0) {
+          await runInBatches(sessionsToUpdate, async (s) => {
+            await supabase
+              .from('sessions')
+              .update({
+                scheduled_at: s.scheduled_at,
+                duration_minutes: s.duration_minutes,
+              })
+              .eq('id', s.id)
+          })
         }
+
+        // Find sessions that need to be pushed (no google_calendar_event_id yet)
+        const sessionsToPush = sessions.filter((s) => !s.google_calendar_event_id)
+
+        if (sessionsToPush.length > MAX_OPERATIONS) {
+          throw new Error(
+            `Troppe sedute da sincronizzare (${sessionsToPush.length}). Limita la ricorrenza o aumenta il limite manualmente.`
+          )
+        }
+
+        setSyncProgress({ current: 0, total: sessionsToPush.length })
+
+        await runInBatches(
+          sessionsToPush,
+          (session) => pushSessionToCalendar(session),
+          (done, total) => setSyncProgress({ current: done, total })
+        )
 
         setUnmappedEvents(unmapped)
         queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -140,13 +200,15 @@ export const useGoogleCalendarSync = () => {
         setError(err instanceof Error ? err.message : 'Sync failed')
       } finally {
         setSyncing(false)
+        setSyncProgress(null)
       }
     },
-    [isConnected, user, sessions, pushSessionToCalendar, queryClient]
+    [isConnected, user, sessions, pushSessionToCalendar, queryClient, syncStart, syncEnd]
   )
 
   return {
     syncing,
+    syncProgress,
     error,
     unmappedEvents,
     pushSessionToCalendar,

@@ -4,6 +4,8 @@ import { Clock, User, Edit, Trash2, Calendar, DollarSign } from 'lucide-react'
 import { Button, EmptyState, Tooltip } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
+import { usePatientBalanceMap } from '@/hooks/usePayments'
+import BalanceDot from '@/components/payments/BalanceDot'
 
 interface Props {
   sessions: SessionWithRelations[]
@@ -22,6 +24,7 @@ export default function SessionsList({
   emptyTitle = 'Nessuna seduta',
   emptyDescription = 'Non ci sono sedute in programma',
 }: Props) {
+  const balanceMap = usePatientBalanceMap()
   if (sessions.length === 0) {
     return (
       <EmptyState
@@ -85,6 +88,7 @@ export default function SessionsList({
                         <span className="font-semibold truncate">
                           {session.patients?.last_name} {session.patients?.first_name}
                         </span>
+                        <BalanceDot balance={balanceMap.get(session.patient_id) || 0} />
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <span

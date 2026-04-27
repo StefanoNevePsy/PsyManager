@@ -1,7 +1,7 @@
 import { format, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Clock, User, Edit, Trash2, Calendar } from 'lucide-react'
-import { Button, EmptyState } from '@/components/ui'
+import { Clock, User, Edit, Trash2, Calendar, DollarSign } from 'lucide-react'
+import { Button, EmptyState, Tooltip } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
 
@@ -9,6 +9,7 @@ interface Props {
   sessions: SessionWithRelations[]
   onEdit: (session: SessionWithRelations) => void
   onDelete: (session: SessionWithRelations) => void
+  onPay?: (session: SessionWithRelations) => void
   emptyTitle?: string
   emptyDescription?: string
 }
@@ -17,6 +18,7 @@ export default function SessionsList({
   sessions,
   onEdit,
   onDelete,
+  onPay,
   emptyTitle = 'Nessuna seduta',
   emptyDescription = 'Non ci sono sedute in programma',
 }: Props) {
@@ -104,20 +106,35 @@ export default function SessionsList({
                       )}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(session)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDelete(session)}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
+                      {onPay && session.service_types?.type === 'private' && (
+                        <Tooltip label="Registra pagamento">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onPay(session)}
+                          >
+                            <DollarSign className="w-4 h-4" />
+                          </Button>
+                        </Tooltip>
+                      )}
+                      <Tooltip label="Modifica">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onEdit(session)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip label="Elimina">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(session)}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>

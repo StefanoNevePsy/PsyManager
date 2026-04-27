@@ -23,6 +23,7 @@ import {
   PageHeader,
   ConfirmDialog,
   Skeleton,
+  Input,
   useToast,
 } from '@/components/ui'
 import SessionForm from '@/components/sessions/SessionForm'
@@ -32,6 +33,7 @@ import GoogleCalendarSync from '@/components/sessions/GoogleCalendarSync'
 import { SessionFormData } from '@/lib/schemas'
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
+import { useCreatePayment } from '@/hooks/usePayments'
 
 type View = 'calendar' | 'list'
 
@@ -43,6 +45,8 @@ export default function SessionsPage() {
   const [editing, setEditing] = useState<SessionWithRelations | null>(null)
   const [deleting, setDeleting] = useState<SessionWithRelations | null>(null)
   const [defaultDate, setDefaultDate] = useState<Date | undefined>()
+  const [payingSession, setPayingSession] = useState<SessionWithRelations | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
 
   const dateRange = useMemo(() => {
     const monthStart = startOfMonth(currentDate)
@@ -64,6 +68,7 @@ export default function SessionsPage() {
   const deleteScopedMutation = useDeleteSessionScoped()
   const convertToSeriesMutation = useConvertSessionToSeries()
   const [deleteScope, setDeleteScope] = useState<DeleteScope>('one')
+  const createPaymentMutation = useCreatePayment()
 
   const { isConnected } = useGoogleCalendarStore()
   const { pushSessionToCalendar, removeSessionFromCalendar } =
@@ -284,6 +289,12 @@ export default function SessionsPage() {
             sessions={sessions}
             onEdit={openEditModal}
             onDelete={openDeleteDialog}
+            onPay={(session) => {
+              setPayingSession(session)
+              setPaymentAmount(
+                Number(session.service_types?.price || 0).toFixed(2)
+              )
+            }}
             emptyTitle="Nessuna seduta in programma"
             emptyDescription="Aggiungi la tua prima seduta per iniziare"
           />
@@ -311,6 +322,15 @@ export default function SessionsPage() {
             setEditing(null)
             setDefaultDate(undefined)
           }}
+          onDelete={
+            editing
+              ? () => {
+                  setModalOpen(false)
+                  setDeleting(editing)
+                  setEditing(null)
+                }
+              : undefined
+          }
           loading={
             createMutation.isPending ||
             updateMutation.isPending ||
@@ -418,6 +438,85 @@ export default function SessionsPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Quick payment modal */}
+      <Modal
+        isOpen={!!payingSession}
+        onClose={() => {
+          setPayingSession(null)
+          setPaymentAmount('')
+        }}
+        title="Registra pagamento"
+        description={
+          payingSession
+            ? `${payingSession.patients?.last_name} ${payingSession.patients?.first_name} — ${payingSession.service_types?.name}`
+            : ''
+        }
+        size="md"
+      >
+        {payingSession && (
+          <div className="space-y-4">
+            <div className="p-3 bg-secondary/50 rounded-md">
+              <p className="text-xs text-muted-foreground">Importo pattuito</p>
+              <p className="text-lg font-semibold">
+                €{Number(payingSession.service_types?.price || 0).toFixed(2)}
+              </p>
+            </div>
+
+            <Input
+              label="Importo pagato"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Lascia vuoto per importo pattuito"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+            />
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPayingSession(null)
+                  setPaymentAmount('')
+                }}
+                disabled={createPaymentMutation.isPending}
+              >
+                Annulla
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    const amount =
+                      paymentAmount && paymentAmount.trim()
+                        ? Number(paymentAmount)
+                        : Number(payingSession.service_types?.price || 0)
+
+                    await createPaymentMutation.mutateAsync({
+                      patient_id: payingSession.patient_id,
+                      session_id: payingSession.id,
+                      amount,
+                      payment_date: new Date().toISOString().split('T')[0],
+                      payment_method: 'other',
+                      notes: `Pagamento rapido da seduta ${payingSession.service_types?.name}`,
+                    })
+                    toast.success('Pagamento registrato')
+                    setPayingSession(null)
+                    setPaymentAmount('')
+                  } catch (error) {
+                    toast.error('Errore nel salvataggio', {
+                      description: error instanceof Error ? error.message : 'Riprova',
+                    })
+                  }
+                }}
+                loading={createPaymentMutation.isPending}
+              >
+                Registra pagamento
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

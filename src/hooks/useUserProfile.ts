@@ -20,9 +20,22 @@ export const useUserProfile = () => {
         .from('users')
         .select('id, email, full_name')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (error) throw error
+
+      if (!data) {
+        // No row yet in public.users (e.g. account predates the auto-create trigger):
+        // create one on the fly so subsequent reads/updates work.
+        const { data: inserted, error: insertError } = await supabase
+          .from('users')
+          .insert({ id: user.id, email: user.email ?? '' })
+          .select('id, email, full_name')
+          .single()
+        if (insertError) throw insertError
+        return inserted as UserProfile
+      }
+
       return data as UserProfile
     },
     enabled: !!user?.id,
@@ -33,15 +46,22 @@ export const useUserProfile = () => {
       if (!user?.id) throw new Error('User not authenticated')
       const { data, error } = await supabase
         .from('users')
-        .update(updates)
-        .eq('id', user.id)
-        .select()
+        .upsert(
+          {
+            id: user.id,
+            email: user.email ?? profile?.email ?? '',
+            ...updates,
+          },
+          { onConflict: 'id' }
+        )
+        .select('id, email, full_name')
         .single()
 
       if (error) throw error
       return data as UserProfile
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData(['userProfile', user?.id], data)
       queryClient.invalidateQueries({ queryKey: ['userProfile'] })
     },
   })

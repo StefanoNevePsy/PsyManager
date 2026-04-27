@@ -1,10 +1,12 @@
-import { useEffect } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Repeat, ChevronDown } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
 import { useServiceTypes } from '@/hooks/useServiceTypes'
+import { describeRecurrence, generateOccurrences } from '@/lib/recurrence'
 import { Database } from '@/types/database'
 
 type Session = Database['public']['Tables']['sessions']['Row']
@@ -26,6 +28,16 @@ const formatDateTimeLocal = (date: Date) => {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
 }
 
+const DAYS_OF_WEEK = [
+  { value: 1, label: 'Lun' },
+  { value: 2, label: 'Mar' },
+  { value: 3, label: 'Mer' },
+  { value: 4, label: 'Gio' },
+  { value: 5, label: 'Ven' },
+  { value: 6, label: 'Sab' },
+  { value: 0, label: 'Dom' },
+]
+
 export default function SessionForm({
   initialData,
   defaultDate,
@@ -35,6 +47,7 @@ export default function SessionForm({
 }: Props) {
   const { data: patients = [] } = usePatients()
   const { data: serviceTypes = [] } = useServiceTypes()
+  const [recurrenceOpen, setRecurrenceOpen] = useState(false)
 
   const initialDateValue = initialData?.scheduled_at
     ? formatDateTimeLocal(new Date(initialData.scheduled_at))
@@ -56,10 +69,22 @@ export default function SessionForm({
       scheduled_at: initialDateValue,
       duration_minutes: initialData?.duration_minutes || 60,
       notes: initialData?.notes || '',
+      recurrence: {
+        enabled: false,
+        frequency: 'weekly',
+        interval_value: 1,
+        interval_unit: 'week',
+        days_of_week: [],
+        end_type: 'count',
+        end_count: 8,
+        end_date: '',
+      },
     },
   })
 
   const serviceTypeId = useWatch({ control, name: 'service_type_id' })
+  const recurrence = useWatch({ control, name: 'recurrence' })
+  const scheduledAt = useWatch({ control, name: 'scheduled_at' })
 
   useEffect(() => {
     if (serviceTypeId && !initialData) {
@@ -69,6 +94,31 @@ export default function SessionForm({
       }
     }
   }, [serviceTypeId, serviceTypes, setValue, initialData])
+
+  const recurrenceEnabled = recurrence?.enabled === true
+  const isEditing = !!initialData
+
+  // Live preview of occurrences
+  const occurrencesPreview = (() => {
+    if (!recurrenceEnabled || !scheduledAt || !recurrence) return null
+    try {
+      const occurrences = generateOccurrences({
+        startAt: new Date(scheduledAt),
+        recurrence: {
+          frequency: recurrence.frequency,
+          interval_value: recurrence.interval_value,
+          interval_unit: recurrence.interval_unit,
+          days_of_week: recurrence.days_of_week,
+          end_type: recurrence.end_type,
+          end_count: recurrence.end_count,
+          end_date: recurrence.end_date,
+        },
+      })
+      return occurrences
+    } catch {
+      return null
+    }
+  })()
 
   const handleFormSubmit = (data: SessionFormData) => {
     const isoDate = new Date(data.scheduled_at).toISOString()
@@ -132,6 +182,194 @@ export default function SessionForm({
         error={errors.notes?.message}
       />
 
+      {/* Recurrence section - only for new sessions */}
+      {!isEditing && (
+        <div className="border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={() => setRecurrenceOpen(!recurrenceOpen)}
+            className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors"
+          >
+            <Repeat className="w-4 h-4" strokeWidth={2} />
+            Ripeti questa seduta
+            {recurrenceEnabled && (
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-primary-soft text-primary font-semibold uppercase tracking-wider">
+                Attiva
+              </span>
+            )}
+            <ChevronDown
+              className={`w-4 h-4 ml-auto transition-transform ${recurrenceOpen ? 'rotate-180' : ''}`}
+              strokeWidth={2}
+            />
+          </button>
+
+          {recurrenceOpen && (
+            <div className="mt-4 space-y-4 pl-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  {...register('recurrence.enabled')}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <span className="text-sm">Crea sedute ricorrenti</span>
+              </label>
+
+              {recurrenceEnabled && (
+                <div className="space-y-4 pl-6 border-l-2 border-border">
+                  <Select
+                    label="Frequenza"
+                    {...register('recurrence.frequency')}
+                    options={[
+                      { value: 'weekly', label: 'Ogni settimana' },
+                      { value: 'biweekly', label: 'Ogni due settimane' },
+                      { value: 'monthly', label: 'Ogni mese' },
+                      { value: 'custom', label: 'Personalizzata' },
+                    ]}
+                  />
+
+                  {recurrence?.frequency === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input
+                        label="Ogni"
+                        type="number"
+                        min={1}
+                        {...register('recurrence.interval_value', { valueAsNumber: true })}
+                      />
+                      <Select
+                        label="Unità"
+                        {...register('recurrence.interval_unit')}
+                        options={[
+                          { value: 'day', label: 'Giorni' },
+                          { value: 'week', label: 'Settimane' },
+                          { value: 'month', label: 'Mesi' },
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  {(recurrence?.frequency === 'weekly' || recurrence?.frequency === 'biweekly') && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Giorni della settimana</p>
+                      <Controller
+                        name="recurrence.days_of_week"
+                        control={control}
+                        render={({ field }) => (
+                          <div className="flex flex-wrap gap-1.5">
+                            {DAYS_OF_WEEK.map((d) => {
+                              const checked = field.value?.includes(d.value) ?? false
+                              return (
+                                <button
+                                  key={d.value}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = field.value ?? []
+                                    if (checked) {
+                                      field.onChange(current.filter((v: number) => v !== d.value))
+                                    } else {
+                                      field.onChange([...current, d.value])
+                                    }
+                                  }}
+                                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                                    checked
+                                      ? 'bg-primary text-primary-foreground'
+                                      : 'bg-secondary text-foreground hover:bg-secondary/70'
+                                  }`}
+                                >
+                                  {d.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Lascia vuoto per ripetere solo nello stesso giorno della data scelta.
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-sm font-medium mb-2">Termina</p>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          value="count"
+                          {...register('recurrence.end_type')}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span>Dopo</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          className="w-20"
+                          {...register('recurrence.end_count', { valueAsNumber: true })}
+                          disabled={recurrence?.end_type !== 'count'}
+                        />
+                        <span>occorrenze</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          value="until"
+                          {...register('recurrence.end_type')}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span>Il</span>
+                        <Input
+                          type="date"
+                          {...register('recurrence.end_date')}
+                          disabled={recurrence?.end_type !== 'until'}
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          value="never"
+                          {...register('recurrence.end_type')}
+                          className="text-primary focus:ring-primary"
+                        />
+                        <span>Mai (a tempo indeterminato)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Live preview */}
+                  {occurrencesPreview && occurrencesPreview.length > 0 && (
+                    <div className="bg-secondary/50 border border-border rounded-md p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        Anteprima
+                      </p>
+                      <p className="text-sm font-medium text-foreground mb-2">
+                        {describeRecurrence({
+                          frequency: recurrence.frequency,
+                          interval_value: recurrence.interval_value,
+                          interval_unit: recurrence.interval_unit,
+                          days_of_week: recurrence.days_of_week,
+                          end_type: recurrence.end_type,
+                          end_count: recurrence.end_count,
+                          end_date: recurrence.end_date,
+                        })}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Verranno create <strong>{occurrencesPreview.length}</strong> sedute
+                        {occurrencesPreview.length > 1 && (
+                          <>
+                            {' '}
+                            (prima: {occurrencesPreview[0]?.toLocaleDateString('it-IT')}, ultima:{' '}
+                            {occurrencesPreview[occurrencesPreview.length - 1]?.toLocaleDateString('it-IT')})
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {patients.length === 0 && (
         <div className="bg-orange-500/10 text-orange-600 p-3 rounded-lg text-sm">
           Nessun paziente trovato. Aggiungi prima un paziente nella sezione Pazienti.
@@ -154,7 +392,7 @@ export default function SessionForm({
           loading={loading}
           disabled={patients.length === 0 || serviceTypes.length === 0}
         >
-          {initialData ? 'Aggiorna' : 'Crea'}
+          {initialData ? 'Aggiorna' : recurrenceEnabled ? 'Crea sedute' : 'Crea'}
         </Button>
       </div>
     </form>

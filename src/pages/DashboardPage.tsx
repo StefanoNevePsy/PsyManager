@@ -8,6 +8,8 @@ import {
   Plus,
   ArrowUpRight,
   AlertCircle,
+  TrendingDown,
+  Wallet,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -15,6 +17,34 @@ import { useDashboardStats } from '@/hooks/useDashboardStats'
 import { useAuth } from '@/hooks/useAuth'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { Button, Card, EmptyState, Skeleton } from '@/components/ui'
+
+const formatEuro = (n: number) =>
+  `${n < 0 ? '-' : ''}€ ${Math.abs(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+interface BalanceBadgeProps {
+  balance: number
+  size?: 'sm' | 'md'
+}
+
+function BalanceBadge({ balance, size = 'sm' }: BalanceBadgeProps) {
+  if (Math.abs(balance) < 0.01) return null
+  const isDebit = balance > 0 // patient owes the therapist
+  const padding = size === 'sm' ? 'px-1.5 py-0.5 text-2xs' : 'px-2 py-1 text-xs'
+  return (
+    <span
+      className={`inline-flex items-center gap-1 ${padding} rounded font-semibold tabular-nums ${
+        isDebit ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success'
+      }`}
+    >
+      {isDebit ? (
+        <TrendingDown className="w-3 h-3" strokeWidth={2.5} />
+      ) : (
+        <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
+      )}
+      {isDebit ? 'Debito' : 'Credito'} {formatEuro(Math.abs(balance))}
+    </span>
+  )
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -156,32 +186,53 @@ export default function DashboardPage() {
             />
           ) : (
             <ul className="divide-y divide-border">
-              {data?.todaySessions.map((session) => (
-                <li
-                  key={session.id}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-secondary/30 transition-colors"
-                >
-                  <div className="flex-shrink-0 w-9 h-9 rounded-md bg-primary-soft text-primary flex items-center justify-center">
-                    <Clock className="w-4 h-4" strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm text-foreground truncate">
-                      {session.patientName}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {session.serviceName}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold tabular-nums text-foreground">
-                      {format(new Date(session.scheduled_at), 'HH:mm')}
-                    </p>
-                    <p className="text-2xs text-muted-foreground tabular-nums">
-                      {session.duration_minutes} min
-                    </p>
-                  </div>
-                </li>
-              ))}
+              {data?.todaySessions.map((session, idx) => {
+                const isFirstFuture =
+                  !session.isPast &&
+                  data.todaySessions.findIndex((s) => !s.isPast) === idx
+                return (
+                  <li
+                    key={session.id}
+                    className={`flex items-center gap-3 px-5 py-3 hover:bg-secondary/30 transition-colors ${
+                      session.isPast ? 'opacity-60' : ''
+                    } ${isFirstFuture ? 'bg-primary-soft/30' : ''}`}
+                  >
+                    <div
+                      className={`flex-shrink-0 w-9 h-9 rounded-md flex items-center justify-center ${
+                        session.isPast
+                          ? 'bg-muted text-muted-foreground'
+                          : 'bg-primary-soft text-primary'
+                      }`}
+                    >
+                      <Clock className="w-4 h-4" strokeWidth={2} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-sm text-foreground truncate">
+                          {session.patientName}
+                        </p>
+                        {isFirstFuture && (
+                          <span className="text-2xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-semibold uppercase tracking-wider">
+                            Prossima
+                          </span>
+                        )}
+                        <BalanceBadge balance={session.patientBalance} />
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {session.serviceName}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold tabular-nums text-foreground">
+                        {format(new Date(session.scheduled_at), 'HH:mm')}
+                      </p>
+                      <p className="text-2xs text-muted-foreground tabular-nums">
+                        {session.duration_minutes} min
+                      </p>
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>
@@ -236,6 +287,99 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Outstanding balances - patients with debt or credit */}
+      {data && data.outstandingBalances.length > 0 && (
+        <section>
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+                Saldi pazienti
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Pazienti con debiti o crediti aperti — priorità a chi ha seduta oggi
+              </p>
+            </div>
+            <Link to="/payments" className="hidden sm:inline-flex">
+              <Button variant="ghost" size="sm">
+                Vai ai pagamenti
+                <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2} />
+              </Button>
+            </Link>
+          </div>
+
+          <Card padding="none">
+            <ul className="divide-y divide-border">
+              {(() => {
+                // Build set of patient IDs with sessions today, ordered by scheduled time
+                const todayPatientOrder = new Map<string, number>()
+                data.todaySessions.forEach((s, idx) => {
+                  if (!todayPatientOrder.has(s.patientId)) {
+                    todayPatientOrder.set(s.patientId, idx)
+                  }
+                })
+
+                // Sort: patients with sessions today first (by session time), then others by abs(balance)
+                const sorted = [...data.outstandingBalances].sort((a, b) => {
+                  const aIdx = todayPatientOrder.get(a.patientId)
+                  const bIdx = todayPatientOrder.get(b.patientId)
+                  if (aIdx !== undefined && bIdx !== undefined) return aIdx - bIdx
+                  if (aIdx !== undefined) return -1
+                  if (bIdx !== undefined) return 1
+                  return Math.abs(b.balance) - Math.abs(a.balance)
+                })
+
+                return sorted.slice(0, 8).map((p) => {
+                  const hasToday = todayPatientOrder.has(p.patientId)
+                  const isDebit = p.balance > 0
+                  return (
+                    <li
+                      key={p.patientId}
+                      className={`flex items-center gap-3 px-5 py-3 transition-colors hover:bg-secondary/30 ${
+                        hasToday ? 'bg-primary-soft/20' : ''
+                      }`}
+                    >
+                      <div
+                        className={`flex-shrink-0 w-9 h-9 rounded-md flex items-center justify-center ${
+                          isDebit
+                            ? 'bg-warning-soft text-warning'
+                            : 'bg-success-soft text-success'
+                        }`}
+                      >
+                        <Wallet className="w-4 h-4" strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-sm text-foreground truncate">
+                            {p.patientName}
+                          </p>
+                          {hasToday && (
+                            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-semibold uppercase tracking-wider">
+                              Oggi
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-2xs text-muted-foreground tabular-nums mt-0.5">
+                          Dovuto: {formatEuro(p.totalDue)} · Pagato: {formatEuro(p.totalPaid)}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p
+                          className={`text-sm font-semibold tabular-nums ${
+                            isDebit ? 'text-warning' : 'text-success'
+                          }`}
+                        >
+                          {isDebit ? 'Debito' : 'Credito'} {formatEuro(Math.abs(p.balance))}
+                        </p>
+                      </div>
+                    </li>
+                  )
+                })
+              })()}
+            </ul>
+          </Card>
+        </section>
+      )}
+
       {/* Upcoming sessions */}
       <section>
         <div className="flex items-end justify-between mb-4">
@@ -289,9 +433,12 @@ export default function DashboardPage() {
                 <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
                   {format(new Date(session.scheduled_at), 'EEEE d MMM', { locale: it })}
                 </p>
-                <p className="font-medium text-sm text-foreground mb-3 truncate">
-                  {session.patientName}
-                </p>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <p className="font-medium text-sm text-foreground truncate">
+                    {session.patientName}
+                  </p>
+                  <BalanceBadge balance={session.patientBalance} />
+                </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground truncate min-w-0">
                     {session.serviceName}

@@ -4,8 +4,13 @@ import { useAuth } from './useAuth'
 import { Database } from '@/types/database'
 
 type Patient = Database['public']['Tables']['patients']['Row']
+type PatientTag = Database['public']['Tables']['patient_tags']['Row']
 type PatientInsert = Database['public']['Tables']['patients']['Insert']
 type PatientUpdate = Database['public']['Tables']['patients']['Update']
+
+export interface PatientWithTags extends Patient {
+  patient_tags?: PatientTag[]
+}
 
 export const usePatients = () => {
   const { user } = useAuth()
@@ -16,12 +21,28 @@ export const usePatients = () => {
       if (!user) return []
       const { data, error } = await supabase
         .from('patients')
-        .select('*')
+        .select(
+          `
+          *,
+          patient_tag_assignments(
+            patient_tags(id, user_id, name, color, icon, created_at, updated_at)
+          )
+        `
+        )
         .eq('user_id', user.id)
         .order('last_name', { ascending: true })
 
       if (error) throw error
-      return data as Patient[]
+
+      // Transform the nested structure
+      const patients = (data as any[]).map((p) => ({
+        ...p,
+        patient_tags: p.patient_tag_assignments
+          ?.map((a: any) => a.patient_tags)
+          .filter((t: any) => t !== null) || [],
+      }))
+
+      return patients as PatientWithTags[]
     },
     enabled: !!user,
   })
@@ -34,12 +55,26 @@ export const usePatient = (id: string | undefined) => {
       if (!id) return null
       const { data, error } = await supabase
         .from('patients')
-        .select('*')
+        .select(
+          `
+          *,
+          patient_tag_assignments(
+            patient_tags(id, user_id, name, color, icon, created_at, updated_at)
+          )
+        `
+        )
         .eq('id', id)
         .single()
 
       if (error) throw error
-      return data as Patient
+
+      const patient = data as any
+      return {
+        ...patient,
+        patient_tags: patient.patient_tag_assignments
+          ?.map((a: any) => a.patient_tags)
+          .filter((t: any) => t !== null) || [],
+      } as PatientWithTags
     },
     enabled: !!id,
   })

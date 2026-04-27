@@ -11,7 +11,9 @@ import {
   useCreateSession,
   useUpdateSession,
   useDeleteSession,
+  useDeleteSessionScoped,
   SessionWithRelations,
+  DeleteScope,
 } from '@/hooks/useSessions'
 import {
   Button,
@@ -58,6 +60,8 @@ export default function SessionsPage() {
   const createMutation = useCreateSession()
   const updateMutation = useUpdateSession()
   const deleteMutation = useDeleteSession()
+  const deleteScopedMutation = useDeleteSessionScoped()
+  const [deleteScope, setDeleteScope] = useState<DeleteScope>('one')
 
   const { isConnected } = useGoogleCalendarStore()
   const { pushSessionToCalendar, removeSessionFromCalendar } =
@@ -83,28 +87,51 @@ export default function SessionsPage() {
         scheduled_at: data.scheduled_at,
         duration_minutes: data.duration_minutes,
         notes: data.notes || undefined,
+        recurrence: data.recurrence,
       }
 
-      let savedSession
       if (editing) {
-        savedSession = await updateMutation.mutateAsync({
+        const savedSession = await updateMutation.mutateAsync({
           id: editing.id,
-          updates: cleanData,
+          updates: {
+            patient_id: cleanData.patient_id,
+            service_type_id: cleanData.service_type_id,
+            scheduled_at: cleanData.scheduled_at,
+            duration_minutes: cleanData.duration_minutes,
+            notes: cleanData.notes,
+          },
         })
         toast.success('Seduta aggiornata')
-      } else {
-        savedSession = await createMutation.mutateAsync(cleanData)
-        toast.success('Seduta pianificata')
-      }
 
-      if (isConnected() && savedSession) {
-        try {
-          await pushSessionToCalendar(savedSession as SessionWithRelations)
-          toast.info('Sincronizzata su Google Calendar')
-        } catch (err) {
-          toast.warning('Salvata, ma sync Calendar fallita', {
-            description: err instanceof Error ? err.message : 'Riprova dalle Impostazioni',
+        if (isConnected() && savedSession) {
+          try {
+            await pushSessionToCalendar(savedSession as SessionWithRelations)
+            toast.info('Sincronizzata su Google Calendar')
+          } catch (err) {
+            toast.warning('Salvata, ma sync Calendar fallita', {
+              description: err instanceof Error ? err.message : 'Riprova dalle Impostazioni',
+            })
+          }
+        }
+      } else {
+        const result = await createMutation.mutateAsync(cleanData)
+        if (result.occurrencesCount > 1) {
+          toast.success(`${result.occurrencesCount} sedute create`, {
+            description: 'Le occorrenze ricorrenti sono state pianificate',
           })
+        } else {
+          toast.success('Seduta pianificata')
+        }
+
+        if (isConnected() && result.session && result.occurrencesCount === 1) {
+          try {
+            await pushSessionToCalendar(result.session as SessionWithRelations)
+            toast.info('Sincronizzata su Google Calendar')
+          } catch (err) {
+            toast.warning('Salvata, ma sync Calendar fallita', {
+              description: err instanceof Error ? err.message : 'Riprova dalle Impostazioni',
+            })
+          }
         }
       }
 
@@ -118,22 +145,40 @@ export default function SessionsPage() {
     }
   }
 
+  const openDeleteDialog = (session: SessionWithRelations) => {
+    setDeleting(session)
+    setDeleteScope('one')
+  }
+
   const handleDelete = async () => {
     if (!deleting) return
     try {
       const calendarEventId = deleting.google_calendar_event_id
-      await deleteMutation.mutateAsync(deleting.id)
+      const isRecurring = !!deleting.series_id
+
+      if (isRecurring && deleteScope !== 'one') {
+        const result = await deleteScopedMutation.mutateAsync({
+          sessionId: deleting.id,
+          seriesId: deleting.series_id,
+          scheduledAt: deleting.scheduled_at,
+          scope: deleteScope,
+        })
+        toast.success(`${result.deletedCount} sedute eliminate`)
+      } else {
+        await deleteMutation.mutateAsync(deleting.id)
+        toast.success('Seduta eliminata')
+      }
 
       if (isConnected() && calendarEventId) {
         try {
           await removeSessionFromCalendar(calendarEventId)
         } catch {
-          // non-fatal: session deleted, calendar cleanup will retry next sync
+          // non-fatal
         }
       }
 
       setDeleting(null)
-      toast.success('Seduta eliminata')
+      setDeleteScope('one')
     } catch (error) {
       toast.error('Eliminazione fallita', {
         description: error instanceof Error ? error.message : 'Riprova tra qualche istante',
@@ -216,7 +261,7 @@ export default function SessionsPage() {
           <SessionsList
             sessions={sessions}
             onEdit={openEditModal}
-            onDelete={setDeleting}
+            onDelete={openDeleteDialog}
             emptyTitle="Nessuna seduta in programma"
             emptyDescription="Aggiungi la tua prima seduta per iniziare"
           />
@@ -248,16 +293,106 @@ export default function SessionsPage() {
         />
       </Modal>
 
-      <ConfirmDialog
-        isOpen={!!deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={handleDelete}
-        title="Eliminare la seduta?"
-        description={`La seduta con ${deleting?.patients?.last_name} ${deleting?.patients?.first_name} verrà rimossa. L'azione non è reversibile.`}
-        confirmText="Elimina"
-        destructive
-        loading={deleteMutation.isPending}
-      />
+      {/* Delete dialog: simple for non-recurring, with scope options for recurring */}
+      {deleting && !deleting.series_id && (
+        <ConfirmDialog
+          isOpen={!!deleting}
+          onClose={() => setDeleting(null)}
+          onConfirm={handleDelete}
+          title="Eliminare la seduta?"
+          description={`La seduta con ${deleting?.patients?.last_name} ${deleting?.patients?.first_name} verrà rimossa. L'azione non è reversibile.`}
+          confirmText="Elimina"
+          destructive
+          loading={deleteMutation.isPending}
+        />
+      )}
+
+      <Modal
+        isOpen={!!deleting && !!deleting.series_id}
+        onClose={() => {
+          setDeleting(null)
+          setDeleteScope('one')
+        }}
+        title="Eliminare seduta ricorrente"
+        description={
+          deleting
+            ? `${deleting.patients?.last_name} ${deleting.patients?.first_name} — questa seduta fa parte di una serie ricorrente`
+            : ''
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:border-foreground/20 transition-colors">
+              <input
+                type="radio"
+                value="one"
+                checked={deleteScope === 'one'}
+                onChange={() => setDeleteScope('one')}
+                className="mt-0.5 text-primary focus:ring-primary"
+              />
+              <div>
+                <p className="font-medium text-sm">Solo questa seduta</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Le altre occorrenze della serie restano invariate
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:border-foreground/20 transition-colors">
+              <input
+                type="radio"
+                value="this_and_following"
+                checked={deleteScope === 'this_and_following'}
+                onChange={() => setDeleteScope('this_and_following')}
+                className="mt-0.5 text-primary focus:ring-primary"
+              />
+              <div>
+                <p className="font-medium text-sm">Questa e tutte le successive</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Mantiene le sedute precedenti già svolte
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:border-foreground/20 transition-colors">
+              <input
+                type="radio"
+                value="all_future"
+                checked={deleteScope === 'all_future'}
+                onChange={() => setDeleteScope('all_future')}
+                className="mt-0.5 text-primary focus:ring-primary"
+              />
+              <div>
+                <p className="font-medium text-sm">Tutte le sedute future</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Cancella tutte le occorrenze a partire da oggi (le passate restano)
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleting(null)
+                setDeleteScope('one')
+              }}
+              disabled={deleteScopedMutation.isPending || deleteMutation.isPending}
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              loading={deleteScopedMutation.isPending || deleteMutation.isPending}
+            >
+              Elimina
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

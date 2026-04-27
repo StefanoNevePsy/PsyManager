@@ -167,9 +167,14 @@ export const useDashboardStats = () => {
       const yearProjection = Math.max(yearIncome, projectedFromSessions)
 
       // Build per-patient balance map
+      // Only count sessions that are truly completed: scheduled_at + duration_minutes < now
       const balanceMap = new Map<string, { totalDue: number; totalPaid: number }>()
       ;(allPastSessions || []).forEach((s: any) => {
         if (s.service_types?.type !== 'private') return
+        const sessionStart = new Date(s.scheduled_at).getTime()
+        const sessionEnd = sessionStart + (s.duration_minutes * 60 * 1000)
+        // Only count if the session has ENDED
+        if (sessionEnd > nowMs) return
         const price = Number(s.service_types?.price || 0)
         if (!balanceMap.has(s.patient_id)) {
           balanceMap.set(s.patient_id, { totalDue: 0, totalPaid: 0 })

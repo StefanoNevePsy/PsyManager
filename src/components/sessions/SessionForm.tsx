@@ -16,6 +16,7 @@ interface Props {
   defaultDate?: Date
   onSubmit: (data: SessionFormData) => void | Promise<void>
   onCancel: () => void
+  onDelete?: () => void
   loading?: boolean
 }
 
@@ -43,6 +44,7 @@ export default function SessionForm({
   defaultDate,
   onSubmit,
   onCancel,
+  onDelete,
   loading = false,
 }: Props) {
   const { data: patients = [] } = usePatients()
@@ -401,23 +403,37 @@ export default function SessionForm({
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-4 border-t border-border">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
-          Annulla
-        </Button>
-        <Button
-          type="submit"
-          loading={loading}
-          disabled={patients.length === 0 || serviceTypes.length === 0}
-        >
-          {initialData
-            ? recurrenceEnabled
-              ? 'Aggiorna e crea ricorrenza'
-              : 'Aggiorna'
-            : recurrenceEnabled
-              ? 'Crea sedute'
-              : 'Crea'}
-        </Button>
+      <div className="flex justify-between gap-2 pt-4 border-t border-border">
+        <div className="flex gap-2">
+          {initialData && onDelete && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={onDelete}
+              disabled={loading}
+            >
+              Elimina
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+            Annulla
+          </Button>
+          <Button
+            type="submit"
+            loading={loading}
+            disabled={patients.length === 0 || serviceTypes.length === 0}
+          >
+            {initialData
+              ? recurrenceEnabled
+                ? 'Aggiorna e crea ricorrenza'
+                : 'Aggiorna'
+              : recurrenceEnabled
+                ? 'Crea sedute'
+                : 'Crea'}
+          </Button>
+        </div>
       </div>
     </form>
   )

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Users,
@@ -11,12 +12,14 @@ import {
   TrendingDown,
   Wallet,
 } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, startOfWeek } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { useDashboardStats } from '@/hooks/useDashboardStats'
 import { useAuth } from '@/hooks/useAuth'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { Button, Card, EmptyState, Skeleton } from '@/components/ui'
+import { useSessions } from '@/hooks/useSessions'
+import WeeklyCalendarView from '@/components/sessions/WeeklyCalendarView'
 
 const formatEuro = (n: number) =>
   `${n < 0 ? '-' : ''}€ ${Math.abs(n).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -50,6 +53,10 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { profile } = useUserProfile()
   const { data, isLoading } = useDashboardStats()
+  const [weeklyDate, setWeeklyDate] = useState(new Date())
+  const weekStart = startOfWeek(weeklyDate, { weekStartsOn: 1 })
+  const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const { data: weeklySessions = [] } = useSessions(weekStart, weekEnd)
 
   const today = new Date()
   const greeting = (() => {
@@ -474,6 +481,27 @@ export default function DashboardPage() {
           </div>
         </Card>
       )}
+
+      {/* Weekly view */}
+      <Card>
+        <div className="p-5 md:p-6">
+          <h2 className="text-lg font-semibold mb-4">Distribuzione settimanale</h2>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[0, 1].map((i) => (
+                <Skeleton key={i} className="h-24 w-full bg-muted" />
+              ))}
+            </div>
+          ) : (
+            <WeeklyCalendarView
+              currentDate={weeklyDate}
+              onDateChange={setWeeklyDate}
+              sessions={weeklySessions}
+              onSessionClick={() => {}}
+            />
+          )}
+        </div>
+      </Card>
     </div>
   )
 }

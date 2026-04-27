@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Plus, List, CalendarDays } from 'lucide-react'
 import {
   startOfMonth,
@@ -40,6 +41,7 @@ type View = 'calendar' | 'list' | 'weekly'
 
 export default function SessionsPage() {
   const { toast } = useToast()
+  const location = useLocation()
   const [view, setView] = useState<View>('calendar')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [modalOpen, setModalOpen] = useState(false)
@@ -48,6 +50,17 @@ export default function SessionsPage() {
   const [defaultDate, setDefaultDate] = useState<Date | undefined>()
   const [payingSession, setPayingSession] = useState<SessionWithRelations | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
+
+  // Handle navigation from dashboard with editSession state
+  useEffect(() => {
+    const state = location.state as { editSession?: SessionWithRelations } | null
+    if (state?.editSession) {
+      setEditing(state.editSession)
+      setModalOpen(true)
+      // Clear the state to prevent reopening on navigation back
+      window.history.replaceState({}, '')
+    }
+  }, [location])
 
   const dateRange = useMemo(() => {
     const monthStart = startOfMonth(currentDate)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Users,
   Calendar,
@@ -50,6 +50,7 @@ function BalanceBadge({ balance, size = 'sm' }: BalanceBadgeProps) {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { profile } = useUserProfile()
   const { data, isLoading } = useDashboardStats()
@@ -57,6 +58,10 @@ export default function DashboardPage() {
   const weekStart = startOfWeek(weeklyDate, { weekStartsOn: 1 })
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
   const { data: weeklySessions = [] } = useSessions(weekStart, weekEnd)
+
+  const handleSessionClick = (session: any) => {
+    navigate('/sessions', { state: { editSession: session } })
+  }
 
   const today = new Date()
   const greeting = (() => {
@@ -432,10 +437,10 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {data?.upcomingSessions.map((session) => (
-              <Link
+              <button
                 key={session.id}
-                to="/sessions"
-                className="block bg-card border border-border rounded-lg p-4 hover:border-foreground/15 hover:shadow-soft transition-all duration-200 ease-out-quart group"
+                onClick={() => handleSessionClick(session)}
+                className="text-left bg-card border border-border rounded-lg p-4 hover:border-foreground/15 hover:shadow-soft transition-all duration-200 ease-out-quart group cursor-pointer"
               >
                 <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
                   {format(new Date(session.scheduled_at), 'EEEE d MMM', { locale: it })}
@@ -454,7 +459,7 @@ export default function DashboardPage() {
                     {format(new Date(session.scheduled_at), 'HH:mm')}
                   </span>
                 </div>
-              </Link>
+              </button>
             ))}
           </div>
         )}

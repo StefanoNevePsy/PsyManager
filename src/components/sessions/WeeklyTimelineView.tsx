@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react'
 import {
   startOfWeek,
   endOfWeek,
@@ -22,6 +23,8 @@ interface Props {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i) // 0-23
+const WORKING_HOURS_START = 8 // 08:00
+const WORKING_HOURS_END = 21 // 21:00
 
 export default function WeeklyTimelineView({
   currentDate,
@@ -30,9 +33,18 @@ export default function WeeklyTimelineView({
   onSessionClick,
 }: Props) {
   const balanceMap = usePatientBalanceMap()
+  const daysScrollRef = useRef<HTMLDivElement>(null)
+
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
+
+  useEffect(() => {
+    if (daysScrollRef.current) {
+      const scrollTop = WORKING_HOURS_START * 80
+      daysScrollRef.current.scrollTop = scrollTop
+    }
+  }, [])
 
   // Group sessions by day and calculate their position/height
   const getSessionsForDay = (day: Date) => {
@@ -77,23 +89,31 @@ export default function WeeklyTimelineView({
       </div>
 
       {/* Timeline container */}
-      <div className="overflow-x-auto border border-border rounded-lg">
-        <div className="flex">
-          {/* Hours column (left) */}
-          <div className="flex flex-col border-r border-border bg-muted/30 flex-shrink-0">
-            <div className="h-12 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border px-2 w-12" />
-            {HOURS.map((hour) => (
-              <div
-                key={hour}
-                className="h-20 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border/50 w-12 flex-shrink-0"
-              >
-                {String(hour).padStart(2, '0')}:00
-              </div>
-            ))}
+      <div className="overflow-x-auto border border-border rounded-lg flex">
+        {/* Hours column (left) */}
+        <div className="flex flex-col border-r border-border bg-muted/30 flex-shrink-0">
+          <div className="h-12 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border px-2 w-12" />
+          <div className="overflow-hidden" style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * 80}px` }}>
+            <div className="relative" style={{ height: `${24 * 80}px`, top: `${-WORKING_HOURS_START * 80}px` }}>
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="h-20 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border/50 w-12 flex-shrink-0"
+                >
+                  {String(hour).padStart(2, '0')}:00
+                </div>
+              ))}
+            </div>
           </div>
+        </div>
 
-          {/* Days columns */}
-          <div className="flex flex-1 divide-x divide-border">
+        {/* Days columns with scroll container */}
+        <div
+          ref={daysScrollRef}
+          className="flex-1 overflow-y-auto"
+          style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * 80 + 48}px` }}
+        >
+          <div className="flex divide-x divide-border" style={{ height: `${24 * 80 + 48}px` }}>
             {days.map((day) => {
               const daySessions = getSessionsForDay(day)
               const isToday =
@@ -108,7 +128,7 @@ export default function WeeklyTimelineView({
                 >
                   {/* Day header */}
                   <div
-                    className={`h-12 flex items-center justify-center border-b border-border text-sm font-semibold ${
+                    className={`h-12 flex items-center justify-center border-b border-border text-sm font-semibold flex-shrink-0 ${
                       isToday ? 'bg-primary/10 text-primary' : 'bg-card'
                     }`}
                   >
@@ -121,7 +141,7 @@ export default function WeeklyTimelineView({
                   </div>
 
                   {/* Hour rows */}
-                  <div className="relative h-[1920px]">
+                  <div className="relative" style={{ height: `${24 * 80}px` }}>
                     {/* Grid lines for each hour */}
                     {HOURS.map((hour) => (
                       <div

@@ -375,6 +375,32 @@ export interface Database {
           tag_id?: string
         }
       }
+      patient_contacts: {
+        Row: {
+          id: string
+          patient_id: string
+          kind: 'phone' | 'email'
+          label: string
+          value: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          patient_id: string
+          kind: 'phone' | 'email'
+          label?: string
+          value: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          kind?: 'phone' | 'email'
+          label?: string
+          value?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {}
     Functions: {}

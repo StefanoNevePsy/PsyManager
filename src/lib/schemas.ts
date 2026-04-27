@@ -1,5 +1,17 @@
 import { z } from 'zod'
 
+export const patientContactSchema = z.object({
+  id: z.string().optional(),
+  kind: z.enum(['phone', 'email']),
+  label: z.string().max(50).optional().or(z.literal('')),
+  value: z
+    .string()
+    .min(1, 'Il valore è obbligatorio')
+    .refine((v) => v.length > 0, 'Il valore è obbligatorio'),
+})
+
+export type PatientContactFormData = z.infer<typeof patientContactSchema>
+
 export const patientSchema = z.object({
   first_name: z.string().min(1, 'Il nome è obbligatorio').max(100),
   last_name: z.string().min(1, 'Il cognome è obbligatorio').max(100),
@@ -8,6 +20,7 @@ export const patientSchema = z.object({
   notes: z.string().optional().or(z.literal('')),
   group_id: z.string().optional().or(z.literal('')),
   group_role: z.string().max(50).optional().or(z.literal('')),
+  contacts: z.array(patientContactSchema).optional(),
 })
 
 export type PatientFormData = z.infer<typeof patientSchema>

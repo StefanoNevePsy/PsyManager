@@ -3,7 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoogleCalendarLifecycle } from '@/hooks/useGoogleCalendarLifecycle'
-import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import PWAUpdatePrompt from '@/components/PWAUpdatePrompt'
@@ -23,9 +25,28 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,
+      // Keep cached data around for 24h so it survives reloads & offline use
+      gcTime: 1000 * 60 * 60 * 24,
       retry: 1,
+      // 'offlineFirst' lets cached data be served immediately even when
+      // offline; pending fetches resume automatically when online again
+      networkMode: 'offlineFirst',
+    },
+    mutations: {
+      // 'offlineFirst' queues mutations while offline and replays them
+      // when connectivity returns
+      networkMode: 'offlineFirst',
+      retry: 2,
     },
   },
+})
+
+// Persist the query cache to localStorage so it survives reloads and is
+// available when the device is offline. Bumping the buster invalidates the
+// cache after deploys when the data shape changes.
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: 'psymanager-query-cache',
 })
 
 const basename = import.meta.env.PROD ? '/PsyManager' : ''
@@ -44,7 +65,10 @@ function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister }}
+    >
       <ToastProvider>
         <PWAUpdatePrompt />
         <Router basename={basename}>
@@ -71,7 +95,7 @@ function App() {
         </Routes>
         </Router>
       </ToastProvider>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   )
 }
 

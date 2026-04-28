@@ -278,7 +278,7 @@ export default function SessionForm({
                         name="recurrence.days_of_week"
                         control={control}
                         render={({ field }) => (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-1.5">
                             {DAYS_OF_WEEK.map((d) => {
                               const checked = field.value?.includes(d.value) ?? false
                               return (
@@ -293,7 +293,7 @@ export default function SessionForm({
                                       field.onChange([...current, d.value])
                                     }
                                   }}
-                                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                                  className={`px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
                                     checked
                                       ? 'bg-primary text-primary-foreground'
                                       : 'bg-secondary text-foreground hover:bg-secondary/70'
@@ -407,7 +407,7 @@ export default function SessionForm({
         </div>
       )}
 
-      <div className="flex justify-between gap-2 pt-4 border-t border-border">
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2 pt-4 border-t border-border">
         <div className="flex gap-2">
           {initialData && onDelete && (
             <Button
@@ -415,41 +415,55 @@ export default function SessionForm({
               variant="destructive"
               onClick={onDelete}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               Elimina
             </Button>
           )}
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:flex-wrap">
           {initialData && onAddToDiary && (
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               onClick={onAddToDiary}
               disabled={loading}
+              className="w-full sm:w-auto"
+              title="Aggiungi al diario clinico"
             >
               <NotebookPen className="w-4 h-4" />
-              Aggiungi al diario
+              <span className="hidden sm:inline">Aggiungi al diario</span>
             </Button>
           )}
           {initialData && onPay && (
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               onClick={onPay}
               disabled={loading}
+              className="w-full sm:w-auto"
+              title="Registra pagamento"
             >
               <DollarSign className="w-4 h-4" />
-              Pagamento
+              <span className="hidden sm:inline">Pagamento</span>
             </Button>
           )}
-          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+            className="w-full sm:w-auto"
+          >
             Annulla
           </Button>
           <Button
             type="submit"
             loading={loading}
             disabled={patients.length === 0 || serviceTypes.length === 0}
+            className="w-full sm:w-auto"
           >
             {initialData
               ? recurrenceEnabled

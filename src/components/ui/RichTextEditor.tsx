@@ -88,7 +88,30 @@ function Toolbar({
   showHelp: boolean
   onToggleHelp: () => void
 }) {
+  // Force re-render on every transaction so toolbar reflects stored marks
+  // (e.g., clicking Bold with no selection should immediately highlight the
+  // button, even though no character has been typed yet)
+  const [, forceUpdate] = useState({})
+  useEffect(() => {
+    if (!editor) return
+    const update = () => forceUpdate({})
+    editor.on('transaction', update)
+    editor.on('selectionUpdate', update)
+    return () => {
+      editor.off('transaction', update)
+      editor.off('selectionUpdate', update)
+    }
+  }, [editor])
+
   if (!editor) return null
+
+  // Check if a mark is "primed" via stored marks (clicked but not yet typed)
+  const isMarkActive = (markName: string) => {
+    if (editor.isActive(markName)) return true
+    const stored = editor.state.storedMarks
+    if (!stored) return false
+    return stored.some((m) => m.type.name === markName)
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-border bg-secondary/30 rounded-t-md">
@@ -128,7 +151,7 @@ function Toolbar({
 
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleBold().run()}
-        active={editor.isActive('bold')}
+        active={isMarkActive('bold')}
         label="Grassetto"
         shortcut="Cmd+B"
       >
@@ -136,7 +159,7 @@ function Toolbar({
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        active={editor.isActive('italic')}
+        active={isMarkActive('italic')}
         label="Corsivo"
         shortcut="Cmd+I"
       >
@@ -144,7 +167,7 @@ function Toolbar({
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleStrike().run()}
-        active={editor.isActive('strike')}
+        active={isMarkActive('strike')}
         label="Barrato"
         shortcut="Cmd+Shift+X"
       >
@@ -152,7 +175,7 @@ function Toolbar({
       </ToolbarButton>
       <ToolbarButton
         onClick={() => editor.chain().focus().toggleCode().run()}
-        active={editor.isActive('code')}
+        active={isMarkActive('code')}
         label="Codice inline"
         shortcut="Cmd+E"
       >

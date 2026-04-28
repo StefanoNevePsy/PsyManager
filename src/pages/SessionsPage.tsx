@@ -53,17 +53,24 @@ export default function SessionsPage() {
   const [payingSession, setPayingSession] = useState<SessionWithRelations | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [diarySession, setDiarySession] = useState<SessionWithRelations | null>(null)
+  const [pendingEditId, setPendingEditId] = useState<string | null>(null)
 
-  // Handle navigation from dashboard with editSession state
+  // Handle navigation from dashboard: capture the requested session id,
+  // set currentDate so the right month is loaded, then wait for sessions
   useEffect(() => {
-    const state = location.state as { editSession?: SessionWithRelations } | null
-    if (state?.editSession) {
-      setEditing(state.editSession)
-      setModalOpen(true)
-      // Clear the state to prevent reopening on navigation back
+    const state = location.state as
+      | { editSessionId?: string; editSessionDate?: string }
+      | null
+    if (state?.editSessionId) {
+      if (state.editSessionDate) {
+        setCurrentDate(new Date(state.editSessionDate))
+      }
+      setPendingEditId(state.editSessionId)
+      // Clear navigation state so navigating back doesn't reopen the modal
       window.history.replaceState({}, '')
     }
-  }, [location])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const dateRange = useMemo(() => {
     const monthStart = startOfMonth(currentDate)
@@ -78,6 +85,17 @@ export default function SessionsPage() {
     dateRange.start,
     dateRange.end
   )
+
+  // Once sessions are loaded, open the modal for the pending edit id
+  useEffect(() => {
+    if (!pendingEditId || isLoading) return
+    const session = sessions.find((s) => s.id === pendingEditId)
+    if (session) {
+      setEditing(session)
+      setModalOpen(true)
+      setPendingEditId(null)
+    }
+  }, [pendingEditId, sessions, isLoading])
 
   const createMutation = useCreateSession()
   const updateMutation = useUpdateSession()

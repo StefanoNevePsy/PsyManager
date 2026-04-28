@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import {
   startOfWeek,
   endOfWeek,
@@ -15,6 +15,21 @@ import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
 import { usePatientBalanceMap } from '@/hooks/usePayments'
 
+// Helper to detect mobile breakpoint (matches Tailwind's md: 768px)
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 768
+  )
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return isMobile
+}
+
 interface Props {
   currentDate: Date
   onDateChange: (date: Date) => void
@@ -25,6 +40,8 @@ interface Props {
 const HOURS = Array.from({ length: 24 }, (_, i) => i) // 0-23
 const WORKING_HOURS_START = 8 // 08:00
 const WORKING_HOURS_END = 21 // 21:00
+const HOUR_HEIGHT_DESKTOP = 80 // px per hour on desktop
+const HOUR_HEIGHT_MOBILE = 40 // px per hour on mobile/tablet
 
 export default function WeeklyTimelineView({
   currentDate,
@@ -32,8 +49,11 @@ export default function WeeklyTimelineView({
   sessions,
   onSessionClick,
 }: Props) {
+  const isMobile = useIsMobile()
   const balanceMap = usePatientBalanceMap()
   const daysScrollRef = useRef<HTMLDivElement>(null)
+
+  const hourHeight = isMobile ? HOUR_HEIGHT_MOBILE : HOUR_HEIGHT_DESKTOP
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
@@ -41,10 +61,10 @@ export default function WeeklyTimelineView({
 
   useEffect(() => {
     if (daysScrollRef.current) {
-      const scrollTop = WORKING_HOURS_START * 80
+      const scrollTop = WORKING_HOURS_START * hourHeight
       daysScrollRef.current.scrollTop = scrollTop
     }
-  }, [])
+  }, [hourHeight])
 
   // Group sessions by day and calculate their position/height
   const getSessionsForDay = (day: Date) => {
@@ -61,7 +81,7 @@ export default function WeeklyTimelineView({
     return {
       top: `${topPercent}%`,
       height: `${heightPercent}%`,
-      minHeight: '40px', // minimum visual height
+      minHeight: isMobile ? '48px' : '40px',
     }
   }
 
@@ -93,12 +113,13 @@ export default function WeeklyTimelineView({
         {/* Hours column (left) */}
         <div className="flex flex-col border-r border-border bg-muted/30 flex-shrink-0">
           <div className="h-12 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border px-2 w-12" />
-          <div className="overflow-hidden" style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * 80}px` }}>
-            <div className="relative" style={{ height: `${24 * 80}px`, top: `${-WORKING_HOURS_START * 80}px` }}>
+          <div className="overflow-hidden" style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * hourHeight}px` }}>
+            <div className="relative" style={{ height: `${24 * hourHeight}px`, top: `${-WORKING_HOURS_START * hourHeight}px` }}>
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="h-20 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border/50 w-12 flex-shrink-0"
+                  className="flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border/50 w-12 flex-shrink-0"
+                  style={{ height: `${hourHeight}px` }}
                 >
                   {String(hour).padStart(2, '0')}:00
                 </div>
@@ -111,9 +132,9 @@ export default function WeeklyTimelineView({
         <div
           ref={daysScrollRef}
           className="flex-1 overflow-y-auto"
-          style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * 80 + 48}px` }}
+          style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * hourHeight + 48}px` }}
         >
-          <div className="flex divide-x divide-border" style={{ height: `${24 * 80 + 48}px` }}>
+          <div className="flex divide-x divide-border" style={{ height: `${24 * hourHeight + 48}px` }}>
             {days.map((day) => {
               const daySessions = getSessionsForDay(day)
               const isToday =
@@ -122,9 +143,10 @@ export default function WeeklyTimelineView({
               return (
                 <div
                   key={day.toISOString()}
-                  className={`flex-1 min-w-[200px] relative ${
+                  className={`flex-1 relative ${
                     isToday ? 'bg-primary/5' : ''
                   }`}
+                  style={{ minWidth: isMobile ? '120px' : '200px' }}
                 >
                   {/* Day header */}
                   <div
@@ -133,21 +155,22 @@ export default function WeeklyTimelineView({
                     }`}
                   >
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground uppercase">
-                        {format(day, 'EEE', { locale: it })}
+                      <p className={`text-xs text-muted-foreground uppercase ${isMobile ? 'text-2xs' : ''}`}>
+                        {format(day, isMobile ? 'EE' : 'EEE', { locale: it })}
                       </p>
-                      <p className={isToday ? 'text-primary' : ''}>{format(day, 'd')}</p>
+                      <p className={`text-sm ${isToday ? 'text-primary' : ''}`}>{format(day, 'd')}</p>
                     </div>
                   </div>
 
                   {/* Hour rows */}
-                  <div className="relative" style={{ height: `${24 * 80}px` }}>
+                  <div className="relative" style={{ height: `${24 * hourHeight}px` }}>
                     {/* Grid lines for each hour */}
                     {HOURS.map((hour) => (
                       <div
                         key={hour}
-                        className="absolute h-20 w-full border-b border-border/30"
+                        className="absolute w-full border-b border-border/30"
                         style={{
+                          height: `${hourHeight}px`,
                           top: `${(hour / 24) * 100}%`,
                         }}
                       />

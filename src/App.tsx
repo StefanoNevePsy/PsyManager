@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoogleCalendarLifecycle } from '@/hooks/useGoogleCalendarLifecycle'
@@ -49,7 +50,10 @@ const persister = createSyncStoragePersister({
   key: 'psymanager-query-cache',
 })
 
-const basename = import.meta.env.PROD ? '/PsyManager' : ''
+// On the web the app lives under https://.../PsyManager/. In the Capacitor
+// WebView it's served from the root, so the basename must be empty.
+const basename =
+  import.meta.env.PROD && !Capacitor.isNativePlatform() ? '/PsyManager' : ''
 
 function App() {
   const { mounted } = useTheme()

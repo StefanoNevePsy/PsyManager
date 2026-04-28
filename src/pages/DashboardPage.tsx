@@ -59,8 +59,13 @@ export default function DashboardPage() {
   const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
   const { data: weeklySessions = [] } = useSessions(weekStart, weekEnd)
 
-  const handleSessionClick = (session: any) => {
-    navigate('/sessions', { state: { editSession: session } })
+  const handleSessionClick = (session: { id: string; scheduled_at: string }) => {
+    navigate('/sessions', {
+      state: {
+        editSessionId: session.id,
+        editSessionDate: session.scheduled_at,
+      },
+    })
   }
 
   const today = new Date()

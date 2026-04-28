@@ -83,7 +83,11 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CALENDAR_API_KEY: ${{ secrets.VITE_GOOGLE_CALENDAR_API_KEY }}
-        run: npm run build
+        # cap:build emits root-relative URLs (base "/") and skips the PWA
+        # service worker, both required for the Capacitor WebView. The
+        # default `npm run build` is for GitHub Pages and bakes in
+        # `/PsyManager/` paths that 404 inside the native app.
+        run: npm run cap:build
 
       - name: Add Android platform
         run: |

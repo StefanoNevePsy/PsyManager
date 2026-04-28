@@ -11,9 +11,11 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "cap:add:android": "cap add android",
-    "cap:sync": "npm run build && cap sync",
+    "cap:build": "tsc && vite build --mode capacitor",
+    "cap:setup:android": "test -d android && bash scripts/setup-android.sh || echo 'android/ not found, skipping setup'",
+    "cap:sync": "npm run cap:build && cap sync && npm run cap:setup:android",
     "cap:open:android": "cap open android",
-    "android:build": "npm run build && cap sync android && cap open android"
+    "android:build": "npm run cap:sync && cap open android"
   },
   "repository": {
     "type": "git",

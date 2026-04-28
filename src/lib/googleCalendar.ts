@@ -2,6 +2,8 @@ const GOOGLE_API_BASE = 'https://www.googleapis.com/calendar/v3'
 const SCOPES = 'https://www.googleapis.com/auth/calendar'
 
 const STORAGE_KEY = 'google_calendar_token'
+// Refresh proactively when the token has less than 5 minutes left
+const REFRESH_THRESHOLD_MS = 5 * 60 * 1000
 
 export interface GoogleTokenInfo {
   access_token: string
@@ -70,8 +72,16 @@ export const clearToken = () => {
   localStorage.removeItem(STORAGE_KEY)
 }
 
-export const requestAccessToken = (
-  clientId: string
+/**
+ * Internal helper that wraps Google's initTokenClient + requestAccessToken.
+ * - prompt='' attempts silent re-authentication (no UI) — Google returns a
+ *   new token without showing anything to the user, as long as they're still
+ *   logged into Google in the browser AND have previously consented.
+ * - prompt='consent' (or undefined) shows the consent popup if needed.
+ */
+const requestToken = (
+  clientId: string,
+  silent: boolean
 ): Promise<GoogleTokenInfo> => {
   return new Promise((resolve, reject) => {
     if (!isGoogleApiLoaded()) {
@@ -82,6 +92,9 @@ export const requestAccessToken = (
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: SCOPES,
+      // Silent: '' (empty string) tells Google to skip UI if possible.
+      // Interactive: 'consent' is the default.
+      prompt: silent ? '' : 'consent',
       callback: (response: {
         access_token: string
         expires_in: number
@@ -106,14 +119,47 @@ export const requestAccessToken = (
   })
 }
 
-const apiCall = async <T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> => {
-  const token = getStoredToken()
-  if (!token) throw new Error('Not authenticated with Google')
+export const requestAccessToken = (clientId: string) =>
+  requestToken(clientId, false)
 
-  const response = await fetch(`${GOOGLE_API_BASE}${path}`, {
+/**
+ * Silently request a new access token without UI. Resolves with a fresh
+ * token if Google still recognizes the user's session, or rejects if the
+ * user needs to re-authenticate interactively.
+ */
+export const requestAccessTokenSilent = (clientId: string) =>
+  requestToken(clientId, true)
+
+/**
+ * Returns the current token if still valid, otherwise attempts a silent
+ * refresh. If the silent refresh fails, returns null — the caller should
+ * prompt the user to reconnect.
+ */
+export const ensureValidToken = async (
+  clientId: string
+): Promise<GoogleTokenInfo | null> => {
+  const stored = getStoredToken()
+  if (stored && stored.expires_at - Date.now() > REFRESH_THRESHOLD_MS) {
+    return stored
+  }
+
+  // Token missing, expired, or expiring soon — try silent refresh
+  if (!clientId) return null
+  try {
+    await loadGoogleApi()
+    const fresh = await requestAccessTokenSilent(clientId)
+    return fresh
+  } catch {
+    return null
+  }
+}
+
+const performFetch = async (
+  path: string,
+  options: RequestInit,
+  token: GoogleTokenInfo
+): Promise<Response> => {
+  return fetch(`${GOOGLE_API_BASE}${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${token.access_token}`,
@@ -121,6 +167,37 @@ const apiCall = async <T>(
       ...options.headers,
     },
   })
+}
+
+const apiCall = async <T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> => {
+  const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || ''
+
+  // Step 1: ensure we have a valid token (refreshing proactively if needed)
+  let token = await ensureValidToken(clientId)
+  if (!token) {
+    // Fall back to whatever's stored — apiCall is a low-level call, callers
+    // can decide to surface a "reconnect" prompt
+    token = getStoredToken()
+  }
+  if (!token) throw new Error('Not authenticated with Google')
+
+  let response = await performFetch(path, options, token)
+
+  // Step 2: if Google rejects the token (e.g., revoked outside our control),
+  // attempt one silent refresh and retry the request once.
+  if (response.status === 401 && clientId) {
+    try {
+      const fresh = await requestAccessTokenSilent(clientId)
+      response = await performFetch(path, options, fresh)
+    } catch {
+      // Silent refresh failed — clear token so UI shows "Reconnect"
+      clearToken()
+      throw new Error('Google authentication expired')
+    }
+  }
 
   if (!response.ok) {
     if (response.status === 401) {

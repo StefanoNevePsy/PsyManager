@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/authStore'
+import { useGoogleCalendarLifecycle } from '@/hooks/useGoogleCalendarLifecycle'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -32,6 +33,7 @@ const basename = import.meta.env.PROD ? '/PsyManager' : ''
 function App() {
   const { mounted } = useTheme()
   const { initialize } = useAuthStore()
+  useGoogleCalendarLifecycle()
 
   useEffect(() => {
     initialize()

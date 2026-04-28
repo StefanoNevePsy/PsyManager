@@ -60,8 +60,11 @@ function ToolbarButton({ onClick, active, disabled, label, children, shortcut }:
   return (
     <button
       type="button"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
+      tabIndex={-1}
+      onPointerDown={(e) => {
+        e.preventDefault()
+        if (!disabled) onClick()
+      }}
       disabled={disabled}
       aria-label={label}
       title={shortcut ? `${label} (${shortcut})` : label}
@@ -316,8 +319,10 @@ function ShortcutsPanel() {
         ))}
       </div>
       <p className="text-2xs text-muted-foreground mt-3">
-        Suggerimento: digita Markdown (come `**grassetto**` o `## Titolo`) e verrà
-        formattato automaticamente, proprio come in un editor di testo.
+        💡 <strong>Suggerimenti:</strong> Digita Markdown (come `**grassetto**` o `## Titolo`) e verrà
+        formattato automaticamente. Oppure <strong>fai clic su un pulsante nella barra e
+        inizia a digitare</strong> — il testo verrà formattato finché non disattivi il
+        pulsante, proprio come in Word.
       </p>
     </div>
   )

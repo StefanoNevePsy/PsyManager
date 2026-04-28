@@ -22,8 +22,9 @@ import {
   Redo2,
   Minus,
   PilcrowSquare,
+  Keyboard,
 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 interface RichTextEditorProps {
   value: string
@@ -59,8 +60,11 @@ function ToolbarButton({ onClick, active, disabled, label, children, shortcut }:
   return (
     <button
       type="button"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
+      tabIndex={-1}
+      onPointerDown={(e) => {
+        e.preventDefault()
+        if (!disabled) onClick()
+      }}
       disabled={disabled}
       aria-label={label}
       title={shortcut ? `${label} (${shortcut})` : label}
@@ -75,7 +79,15 @@ function ToolbarButton({ onClick, active, disabled, label, children, shortcut }:
   )
 }
 
-function Toolbar({ editor }: { editor: Editor | null }) {
+function Toolbar({
+  editor,
+  showHelp,
+  onToggleHelp,
+}: {
+  editor: Editor | null
+  showHelp: boolean
+  onToggleHelp: () => void
+}) {
   if (!editor) return null
 
   return (
@@ -207,7 +219,6 @@ function Toolbar({ editor }: { editor: Editor | null }) {
         }}
         active={editor.isActive('link')}
         label="Link"
-        shortcut="Cmd+K"
       >
         <LinkIcon className="w-4 h-4" strokeWidth={2} />
       </ToolbarButton>
@@ -230,6 +241,89 @@ function Toolbar({ editor }: { editor: Editor | null }) {
       >
         <Redo2 className="w-4 h-4" strokeWidth={2} />
       </ToolbarButton>
+
+      <span className="ml-auto" />
+
+      <ToolbarButton
+        onClick={onToggleHelp}
+        active={showHelp}
+        label="Mostra scorciatoie"
+      >
+        <Keyboard className="w-4 h-4" strokeWidth={2} />
+      </ToolbarButton>
+    </div>
+  )
+}
+
+const SHORTCUTS: Array<{ section: string; items: Array<[string, string]> }> = [
+  {
+    section: 'Formattazione',
+    items: [
+      ['Grassetto', 'Cmd/Ctrl+B oppure **testo**'],
+      ['Corsivo', 'Cmd/Ctrl+I oppure *testo*'],
+      ['Barrato', 'Cmd/Ctrl+Shift+X oppure ~~testo~~'],
+      ['Codice inline', 'Cmd/Ctrl+E oppure `testo`'],
+    ],
+  },
+  {
+    section: 'Struttura',
+    items: [
+      ['Titolo 1/2/3', 'Cmd/Ctrl+Alt+1/2/3 oppure # / ## / ###'],
+      ['Paragrafo', 'Cmd/Ctrl+Alt+0'],
+      ['Citazione', 'Cmd/Ctrl+Shift+B oppure > all\'inizio'],
+      ['Linea orizzontale', '--- all\'inizio della riga'],
+    ],
+  },
+  {
+    section: 'Liste',
+    items: [
+      ['Elenco puntato', 'Cmd/Ctrl+Shift+8 oppure - all\'inizio'],
+      ['Elenco numerato', 'Cmd/Ctrl+Shift+7 oppure 1. all\'inizio'],
+      ['Aumenta indentazione', 'Tab in una lista'],
+      ['Diminuisci indentazione', 'Shift+Tab in una lista'],
+    ],
+  },
+  {
+    section: 'Modifica',
+    items: [
+      ['Annulla / Ripeti', 'Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z'],
+      ['Link', 'Pulsante in barra strumenti'],
+      ['A capo nello stesso paragrafo', 'Shift+Invio'],
+    ],
+  },
+]
+
+function ShortcutsPanel() {
+  return (
+    <div className="px-4 py-3 border-b border-border bg-secondary/20 text-xs">
+      <p className="font-medium text-foreground mb-2">
+        Scorciatoie tastiera e Markdown
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+        {SHORTCUTS.map((group) => (
+          <div key={group.section}>
+            <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+              {group.section}
+            </p>
+            <ul className="space-y-1">
+              {group.items.map(([label, hint]) => (
+                <li key={label} className="flex items-baseline gap-2">
+                  <span className="text-foreground flex-shrink-0">{label}:</span>
+                  <code className="text-2xs px-1 py-0.5 bg-secondary rounded text-muted-foreground">
+                    {hint}
+                  </code>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <p className="text-2xs text-muted-foreground mt-3">
+        💡 <strong>Suggerimenti:</strong> Digita Markdown (come `**grassetto**` o `## Titolo`) e verrà
+        formattato automaticamente. Oppure <strong>fai clic su un pulsante nella barra e
+        inizia a digitare</strong> — il testo verrà formattato finché non disattivi il
+        pulsante, proprio come in Word.
+      </p>
     </div>
   )
 }
@@ -242,6 +336,7 @@ export default function RichTextEditor({
   autofocus = false,
   ariaLabel,
 }: RichTextEditorProps) {
+  const [showHelp, setShowHelp] = useState(false)
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -302,7 +397,12 @@ export default function RichTextEditor({
       className="border border-border rounded-md focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10 transition-all"
       style={{ ['--editor-min-height' as any]: minHeight }}
     >
-      <Toolbar editor={editor} />
+      <Toolbar
+        editor={editor}
+        showHelp={showHelp}
+        onToggleHelp={() => setShowHelp((s) => !s)}
+      />
+      {showHelp && <ShortcutsPanel />}
       <EditorContent editor={editor} className="bg-background rounded-b-md" />
     </div>
   )

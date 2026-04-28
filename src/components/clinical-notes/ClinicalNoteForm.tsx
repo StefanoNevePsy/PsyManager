@@ -13,15 +13,26 @@ interface Props {
   initialData?: ClinicalNote
   defaultPatientId?: string
   defaultSessionId?: string
+  defaultNoteDate?: string
+  defaultTitle?: string
   onSubmit: (data: ClinicalNoteFormData) => void | Promise<void>
   onCancel: () => void
   loading?: boolean
+}
+
+const formatDateLocal = (d: Date) => {
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 export default function ClinicalNoteForm({
   initialData,
   defaultPatientId,
   defaultSessionId,
+  defaultNoteDate,
+  defaultTitle,
   onSubmit,
   onCancel,
   loading = false,
@@ -40,9 +51,10 @@ export default function ClinicalNoteForm({
     defaultValues: {
       patient_id: initialData?.patient_id || defaultPatientId || '',
       session_id: initialData?.session_id || defaultSessionId || '',
-      title: initialData?.title || '',
+      title: initialData?.title || defaultTitle || '',
       content: initialData?.content || '',
-      note_date: initialData?.note_date || new Date().toISOString().split('T')[0],
+      note_date:
+        initialData?.note_date || defaultNoteDate || formatDateLocal(new Date()),
     },
   })
 

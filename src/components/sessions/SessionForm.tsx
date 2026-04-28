@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Repeat, ChevronDown, Info, DollarSign } from 'lucide-react'
+import { Repeat, ChevronDown, Info, DollarSign, NotebookPen } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
@@ -18,6 +18,7 @@ interface Props {
   onCancel: () => void
   onDelete?: () => void
   onPay?: () => void
+  onAddToDiary?: () => void
   loading?: boolean
 }
 
@@ -47,6 +48,7 @@ export default function SessionForm({
   onCancel,
   onDelete,
   onPay,
+  onAddToDiary,
   loading = false,
 }: Props) {
   const { data: patients = [] } = usePatients()
@@ -418,7 +420,18 @@ export default function SessionForm({
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {initialData && onAddToDiary && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onAddToDiary}
+              disabled={loading}
+            >
+              <NotebookPen className="w-4 h-4" />
+              Aggiungi al diario
+            </Button>
+          )}
           {initialData && onPay && (
             <Button
               type="button"

@@ -51,20 +51,29 @@ export default function WeeklyTimelineView({
 }: Props) {
   const isMobile = useIsMobile()
   const balanceMap = usePatientBalanceMap()
-  const daysScrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const hourHeight = isMobile ? HOUR_HEIGHT_MOBILE : HOUR_HEIGHT_DESKTOP
+  // Mobile fits all 7 days inside the viewport, so we render only working
+  // hours (8–21) without vertical scroll. Desktop keeps the full 24-hour
+  // grid scrollable so the user can drag sessions to off-hours.
+  const visibleHours = isMobile
+    ? HOURS.filter((h) => h >= WORKING_HOURS_START && h <= WORKING_HOURS_END)
+    : HOURS
+  const visibleStart = isMobile ? WORKING_HOURS_START : 0
+  const totalHours = visibleHours.length
+  const bodyHeight = totalHours * hourHeight
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
 
+  // On desktop, pre-scroll to working hours on mount
   useEffect(() => {
-    if (daysScrollRef.current) {
-      const scrollTop = WORKING_HOURS_START * hourHeight
-      daysScrollRef.current.scrollTop = scrollTop
+    if (!isMobile && scrollRef.current) {
+      scrollRef.current.scrollTop = WORKING_HOURS_START * hourHeight
     }
-  }, [hourHeight])
+  }, [hourHeight, isMobile])
 
   // Group sessions by day and calculate their position/height
   const getSessionsForDay = (day: Date) => {
@@ -74,19 +83,22 @@ export default function WeeklyTimelineView({
 
   const getSessionStyle = (session: SessionWithRelations) => {
     const start = new Date(session.scheduled_at)
-    const topOffsetMinutes = getHours(start) * 60 + getMinutes(start)
-    const topPercent = (topOffsetMinutes / (24 * 60)) * 100
-    const heightPercent = (session.duration_minutes / (24 * 60)) * 100
+    const offsetMinutes =
+      (getHours(start) - visibleStart) * 60 + getMinutes(start)
+    const top = (offsetMinutes / 60) * hourHeight
+    const height = (session.duration_minutes / 60) * hourHeight
 
     return {
-      top: `${topPercent}%`,
-      height: `${heightPercent}%`,
-      minHeight: isMobile ? '48px' : '40px',
+      top: `${top}px`,
+      height: `${height}px`,
+      minHeight: isMobile ? '32px' : '40px',
     }
   }
 
+  const hoursColWidth = isMobile ? 36 : 56
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
@@ -95,7 +107,7 @@ export default function WeeklyTimelineView({
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
-        <h3 className="text-base font-semibold">
+        <h3 className="text-sm sm:text-base font-semibold">
           {format(weekStart, 'd MMM', { locale: it })} —{' '}
           {format(weekEnd, 'd MMM yyyy', { locale: it })}
         </h3>
@@ -108,130 +120,163 @@ export default function WeeklyTimelineView({
         </Button>
       </div>
 
-      {/* Timeline container */}
-      <div className="overflow-x-auto border border-border rounded-lg flex">
-        {/* Hours column (left) */}
-        <div className="flex flex-col border-r border-border bg-muted/30 flex-shrink-0">
-          <div className="h-12 flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border px-2 w-12" />
-          <div className="overflow-hidden" style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * hourHeight}px` }}>
-            <div className="relative" style={{ height: `${24 * hourHeight}px`, top: `${-WORKING_HOURS_START * hourHeight}px` }}>
-              {HOURS.map((hour) => (
-                <div
-                  key={hour}
-                  className="flex items-center justify-center text-xs font-medium text-muted-foreground border-b border-border/50 w-12 flex-shrink-0"
-                  style={{ height: `${hourHeight}px` }}
-                >
-                  {String(hour).padStart(2, '0')}:00
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Days columns with scroll container */}
+      {/* Single scroll container — hours and days move together. Sticky
+          left column keeps hour labels visible during horizontal scroll;
+          sticky top row keeps day headers visible during vertical scroll. */}
+      <div
+        ref={scrollRef}
+        className="overflow-auto border border-border rounded-lg bg-card"
+        style={{
+          // On mobile we render only working hours so vertical scroll is
+          // typically unnecessary; cap height anyway to avoid overflowing
+          // the viewport on very short screens.
+          maxHeight: isMobile ? 'calc(100vh - 220px)' : '70vh',
+        }}
+      >
         <div
-          ref={daysScrollRef}
-          className="flex-1 overflow-y-auto"
-          style={{ height: `${(WORKING_HOURS_END - WORKING_HOURS_START) * hourHeight + 48}px` }}
+          className="grid"
+          style={{
+            gridTemplateColumns: `${hoursColWidth}px repeat(7, minmax(${
+              isMobile ? '0' : '120px'
+            }, 1fr))`,
+            width: '100%',
+          }}
         >
-          <div className="flex divide-x divide-border" style={{ height: `${24 * hourHeight + 48}px` }}>
-            {days.map((day) => {
-              const daySessions = getSessionsForDay(day)
-              const isToday =
-                format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+          {/* Top-left corner (empty, masks where sticky header meets sticky col) */}
+          <div className="sticky top-0 left-0 z-30 h-10 bg-card border-b border-r border-border" />
 
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={`flex-1 relative ${
-                    isToday ? 'bg-primary/5' : ''
+          {/* Day headers (sticky top) */}
+          {days.map((day) => {
+            const isToday =
+              format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+            return (
+              <div
+                key={day.toISOString()}
+                className={`sticky top-0 z-20 h-10 flex flex-col items-center justify-center border-b border-l border-border text-xs ${
+                  isToday ? 'bg-primary/10 text-primary' : 'bg-card'
+                }`}
+              >
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">
+                  {format(day, isMobile ? 'EEEEE' : 'EEE', { locale: it })}
+                </span>
+                <span
+                  className={`text-sm font-semibold leading-tight ${
+                    isToday ? 'text-primary' : ''
                   }`}
-                  style={{ minWidth: isMobile ? '120px' : '200px' }}
                 >
-                  {/* Day header */}
-                  <div
-                    className={`h-12 flex items-center justify-center border-b border-border text-sm font-semibold flex-shrink-0 ${
-                      isToday ? 'bg-primary/10 text-primary' : 'bg-card'
-                    }`}
-                  >
-                    <div className="text-center">
-                      <p className={`text-xs text-muted-foreground uppercase ${isMobile ? 'text-2xs' : ''}`}>
-                        {format(day, isMobile ? 'EE' : 'EEE', { locale: it })}
-                      </p>
-                      <p className={`text-sm ${isToday ? 'text-primary' : ''}`}>{format(day, 'd')}</p>
-                    </div>
-                  </div>
+                  {format(day, 'd')}
+                </span>
+              </div>
+            )
+          })}
 
-                  {/* Hour rows */}
-                  <div className="relative" style={{ height: `${24 * hourHeight}px` }}>
-                    {/* Grid lines for each hour */}
-                    {HOURS.map((hour) => (
-                      <div
-                        key={hour}
-                        className="absolute w-full border-b border-border/30"
-                        style={{
-                          height: `${hourHeight}px`,
-                          top: `${(hour / 24) * 100}%`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Session blocks */}
-                    {daySessions.map((session) => {
-                      const color = getServiceColor(session.service_type_id)
-                      const end = addMinutes(
-                        new Date(session.scheduled_at),
-                        session.duration_minutes
-                      )
-                      return (
-                        <button
-                          key={session.id}
-                          onClick={() => onSessionClick(session)}
-                          className="absolute w-11/12 left-1/2 transform -translate-x-1/2 p-2 rounded border transition-all hover:shadow-md cursor-pointer"
-                          style={{
-                            ...getSessionStyle(session),
-                            ...color.pillStyle,
-                            borderColor: color.hex,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              color.pillHoverStyle.backgroundColor
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              color.pillStyle.backgroundColor
-                          }}
-                          title={`${session.patients?.last_name} — ${session.service_types?.name}`}
-                        >
-                          <div className="text-xs font-semibold leading-tight">
-                            {format(new Date(session.scheduled_at), 'HH:mm')}—
-                            {format(end, 'HH:mm')}
-                          </div>
-                          <div className="text-2xs opacity-90 truncate leading-tight flex items-center gap-1">
-                            {session.patients?.last_name}
-                            {(() => {
-                              const bal = balanceMap.get(session.patient_id) || 0
-                              if (Math.abs(bal) < 0.01) return null
-                              return (
-                                <span
-                                  className={`inline-block w-1.5 h-1.5 rounded-full ${
-                                    bal > 0 ? 'bg-destructive' : 'bg-success'
-                                  }`}
-                                />
-                              )
-                            })()}
-                          </div>
-                          <div className="text-2xs opacity-75 truncate leading-tight">
-                            {session.service_types?.name}
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
+          {/* Hour column + day cells. Render as one big body grid so hour
+              labels stay aligned with their respective rows. */}
+          <div
+            className="sticky left-0 z-10 bg-card border-r border-border"
+            style={{ height: `${bodyHeight}px` }}
+          >
+            {visibleHours.map((hour, i) => (
+              <div
+                key={hour}
+                className="flex items-start justify-end pr-1.5 pt-0.5 text-[10px] font-medium text-muted-foreground border-b border-border/40"
+                style={{ height: `${hourHeight}px` }}
+              >
+                {i === 0 ? null : `${String(hour).padStart(2, '0')}:00`}
+              </div>
+            ))}
           </div>
+
+          {days.map((day) => {
+            const daySessions = getSessionsForDay(day)
+            const isToday =
+              format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+
+            return (
+              <div
+                key={day.toISOString()}
+                className={`relative border-l border-border ${
+                  isToday ? 'bg-primary/5' : ''
+                }`}
+                style={{ height: `${bodyHeight}px` }}
+              >
+                {/* Hour grid lines */}
+                {visibleHours.map((hour, i) => (
+                  <div
+                    key={hour}
+                    className="absolute w-full border-b border-border/40"
+                    style={{
+                      top: `${i * hourHeight}px`,
+                      height: `${hourHeight}px`,
+                    }}
+                  />
+                ))}
+
+                {/* Session blocks */}
+                {daySessions.map((session) => {
+                  const color = getServiceColor(session.service_type_id)
+                  const end = addMinutes(
+                    new Date(session.scheduled_at),
+                    session.duration_minutes
+                  )
+                  const bal = balanceMap.get(session.patient_id) || 0
+                  const showBalDot = Math.abs(bal) >= 0.01
+                  return (
+                    <button
+                      key={session.id}
+                      onClick={() => onSessionClick(session)}
+                      className="absolute left-0.5 right-0.5 px-1 py-0.5 sm:p-2 rounded border text-left overflow-hidden transition-all hover:shadow-md cursor-pointer"
+                      style={{
+                        ...getSessionStyle(session),
+                        ...color.pillStyle,
+                        borderColor: color.hex,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor =
+                          color.pillHoverStyle.backgroundColor
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor =
+                          color.pillStyle.backgroundColor
+                      }}
+                      title={`${format(
+                        new Date(session.scheduled_at),
+                        'HH:mm'
+                      )}—${format(end, 'HH:mm')} · ${
+                        session.patients?.last_name ?? ''
+                      } · ${session.service_types?.name ?? ''}`}
+                    >
+                      <div className="text-[10px] sm:text-xs font-semibold leading-tight truncate">
+                        {format(new Date(session.scheduled_at), 'HH:mm')}
+                        {!isMobile && (
+                          <>—{format(end, 'HH:mm')}</>
+                        )}
+                      </div>
+                      <div className="text-[10px] sm:text-2xs opacity-90 truncate leading-tight flex items-center gap-1">
+                        <span className="truncate">
+                          {session.patients?.last_name}
+                        </span>
+                        {showBalDot && (
+                          <span
+                            className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                              bal > 0 ? 'bg-destructive' : 'bg-success'
+                            }`}
+                          />
+                        )}
+                      </div>
+                      {!isMobile && (
+                        <div className="text-2xs opacity-75 truncate leading-tight">
+                          {session.service_types?.name}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+                {/* isToday flag is already applied via background tint */}
+                {isToday && null}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

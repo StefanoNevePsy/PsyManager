@@ -195,10 +195,11 @@ if "kotlin-android" not in content:
     )
 
 if "kotlin-stdlib" not in content:
-    # Add Kotlin stdlib to the dependencies block
+    # Add Kotlin stdlib to the dependencies block (single quotes — Groovy
+    # accepts both, and avoids backslash-escaping inside this Python heredoc)
     content = re.sub(
         r"(dependencies\s*\{)",
-        r"\1\n    implementation \"org.jetbrains.kotlin:kotlin-stdlib:1.9.24\"",
+        r"\1\n    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'",
         content,
         count=1,
     )
@@ -217,7 +218,7 @@ content = p.read_text()
 if "kotlin-gradle-plugin" not in content:
     content = re.sub(
         r"(classpath ['\"]com\.android\.tools\.build:gradle:[^'\"]+['\"])",
-        r"\1\n        classpath \"org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24\"",
+        r"\1\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24'",
         content,
         count=1,
     )

@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core'
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth'
+
 const GOOGLE_API_BASE = 'https://www.googleapis.com/calendar/v3'
 const SCOPES = 'https://www.googleapis.com/auth/calendar'
 
@@ -28,12 +31,29 @@ declare global {
   }
 }
 
+const isNativePlatform = () => Capacitor.isNativePlatform()
+
 export const isGoogleApiLoaded = () => {
-  return typeof window !== 'undefined' && !!window.google?.accounts?.oauth2
+  // On native, we don't need GIS loaded; on web, check for window.google
+  return isNativePlatform() || (typeof window !== 'undefined' && !!window.google?.accounts?.oauth2)
 }
 
 export const loadGoogleApi = (): Promise<void> => {
   return new Promise((resolve, reject) => {
+    // On native platform, initialize the plugin instead of loading the script
+    if (isNativePlatform()) {
+      const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) || ''
+      if (!clientId) {
+        reject(new Error('Google Client ID not configured'))
+        return
+      }
+      GoogleAuth.initialize({ clientId, scopes: [SCOPES] })
+        .then(() => resolve())
+        .catch((error) => reject(error))
+      return
+    }
+
+    // Web: load Google Identity Services
     if (isGoogleApiLoaded()) {
       resolve()
       return
@@ -79,12 +99,12 @@ export const clearToken = () => {
  *   logged into Google in the browser AND have previously consented.
  * - prompt='consent' (or undefined) shows the consent popup if needed.
  */
-const requestToken = (
+const requestTokenWeb = (
   clientId: string,
   silent: boolean
 ): Promise<GoogleTokenInfo> => {
   return new Promise((resolve, reject) => {
-    if (!isGoogleApiLoaded()) {
+    if (!window.google?.accounts?.oauth2) {
       reject(new Error('Google API not loaded'))
       return
     }
@@ -117,6 +137,56 @@ const requestToken = (
 
     tokenClient.requestAccessToken()
   })
+}
+
+/**
+ * Native platform: request token via Capacitor plugin
+ */
+const requestTokenNative = async (): Promise<GoogleTokenInfo> => {
+  const user = await GoogleAuth.signIn()
+
+  if (!user.authentication?.accessToken) {
+    throw new Error('Failed to get access token')
+  }
+
+  const tokenInfo: GoogleTokenInfo = {
+    access_token: user.authentication.accessToken,
+    // Plugin doesn't provide expiry time, so assume 1 hour
+    expires_at: Date.now() + 3600 * 1000,
+    scope: SCOPES,
+  }
+  saveToken(tokenInfo)
+  return tokenInfo
+}
+
+/**
+ * Silent token refresh on native: attempt to get a fresh token without UI
+ */
+const requestTokenNativeSilent = async (): Promise<GoogleTokenInfo> => {
+  const auth = await GoogleAuth.refresh()
+
+  if (!auth.accessToken) {
+    throw new Error('Failed to refresh access token')
+  }
+
+  const tokenInfo: GoogleTokenInfo = {
+    access_token: auth.accessToken,
+    // Plugin doesn't provide expiry time, so assume 1 hour
+    expires_at: Date.now() + 3600 * 1000,
+    scope: SCOPES,
+  }
+  saveToken(tokenInfo)
+  return tokenInfo
+}
+
+const requestToken = (
+  clientId: string,
+  silent: boolean
+): Promise<GoogleTokenInfo> => {
+  if (isNativePlatform()) {
+    return silent ? requestTokenNativeSilent() : requestTokenNative()
+  }
+  return requestTokenWeb(clientId, silent)
 }
 
 export const requestAccessToken = (clientId: string) =>

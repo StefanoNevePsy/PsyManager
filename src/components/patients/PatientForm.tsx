@@ -111,7 +111,6 @@ export default function PatientForm({
         <Input
           id="last_name"
           label="Cognome"
-          required
           {...register('last_name')}
           error={errors.last_name?.message}
         />

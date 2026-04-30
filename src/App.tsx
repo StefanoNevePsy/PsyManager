@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useGoogleCalendarLifecycle } from '@/hooks/useGoogleCalendarLifecycle'
 import { useDeepLinks } from '@/hooks/useDeepLinks'
 import { useSessionsWidget } from '@/hooks/useSessionsWidget'
+import { useRemindersSync } from '@/hooks/useRemindersSync'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
@@ -62,6 +63,7 @@ const basename =
 function AppRoutes() {
   useDeepLinks()
   useSessionsWidget()
+  useRemindersSync()
 
   return (
     <Routes>

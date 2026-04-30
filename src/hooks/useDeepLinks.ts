@@ -2,17 +2,22 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
+import { LocalNotifications } from '@capacitor/local-notifications'
 
 /**
- * Handles deep links of the form `psymanager://<path>` triggered from the
- * Android home-screen widget.
+ * Handles deep links from the Android home-screen widget and taps on local
+ * reminder notifications.
  *
- *   psymanager://sessions          → go to the sessions page
- *   psymanager://session/<id>      → go to the sessions page and open the
- *                                    edit modal for that session
+ * Widget URLs:
+ *   psymanager://sessions       → go to the sessions page
+ *   psymanager://session/<id>   → open the edit modal for that session
  *
- * Works for cold starts (via App.getLaunchUrl) and warm starts (via
- * App.appUrlOpen). No-op on the web.
+ * Notification taps carry { sessionId, kind } in the notification's `extra`:
+ *   kind = 'pre'  → open the session modal
+ *   kind = 'post' → open the session modal AND the payment modal
+ *
+ * Works for cold starts (App.getLaunchUrl) and warm starts (App.appUrlOpen
+ * and localNotificationActionPerformed). No-op on the web.
  */
 export function useDeepLinks() {
   const navigate = useNavigate()
@@ -22,7 +27,6 @@ export function useDeepLinks() {
 
     const handleUrl = (url: string) => {
       try {
-        // Use a permissive parser since the URL is locally generated
         const m = url.match(/^psymanager:\/\/(.*)$/)
         if (!m) return
         const path = m[1]
@@ -39,24 +43,38 @@ export function useDeepLinks() {
           navigate('/sessions')
         }
       } catch {
-        // Ignore malformed URLs
+        // ignore malformed URLs
       }
     }
 
-    let listener: { remove: () => void } | null = null
+    const handleNotification = (extra: unknown) => {
+      if (!extra || typeof extra !== 'object') return
+      const data = extra as { sessionId?: string; kind?: 'pre' | 'post' }
+      if (!data.sessionId) return
+      const state =
+        data.kind === 'post'
+          ? { editSessionId: data.sessionId, openPayment: true }
+          : { editSessionId: data.sessionId }
+      navigate('/sessions', { state })
+    }
+
+    const removers: Array<{ remove: () => void }> = []
+
     CapacitorApp.addListener('appUrlOpen', ({ url }) => handleUrl(url)).then(
-      (handle) => {
-        listener = handle
-      }
+      (h) => removers.push(h)
     )
 
-    // Cold start: check if the app was launched via a deep link
+    LocalNotifications.addListener(
+      'localNotificationActionPerformed',
+      (action) => handleNotification(action.notification.extra)
+    ).then((h) => removers.push(h))
+
     CapacitorApp.getLaunchUrl().then((res) => {
       if (res?.url) handleUrl(res.url)
     })
 
     return () => {
-      if (listener) listener.remove()
+      for (const r of removers) r.remove()
     }
   }, [navigate])
 }

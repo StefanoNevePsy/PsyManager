@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Repeat, ChevronDown, Info, DollarSign, NotebookPen } from 'lucide-react'
+import { Repeat, ChevronDown, Info, DollarSign, NotebookPen, Users } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
+import { usePatientGroups } from '@/hooks/usePatientGroups'
 import { useServiceTypes } from '@/hooks/useServiceTypes'
 import { describeRecurrence, generateOccurrences } from '@/lib/recurrence'
 import { Database } from '@/types/database'
@@ -52,8 +53,10 @@ export default function SessionForm({
   loading = false,
 }: Props) {
   const { data: patients = [] } = usePatients()
+  const { data: patientGroups = [] } = usePatientGroups()
   const { data: serviceTypes = [] } = useServiceTypes()
   const [recurrenceOpen, setRecurrenceOpen] = useState(false)
+  const [selectedType, setSelectedType] = useState<'patient' | 'group'>('patient')
 
   const initialDateValue = initialData?.scheduled_at
     ? formatDateTimeLocal(new Date(initialData.scheduled_at))
@@ -71,6 +74,8 @@ export default function SessionForm({
     resolver: zodResolver(sessionSchema),
     defaultValues: {
       patient_id: initialData?.patient_id || '',
+      group_id: initialData?.group_id || '',
+      session_type: initialData?.session_type || 'individuale',
       service_type_id: initialData?.service_type_id || '',
       scheduled_at: initialDateValue,
       duration_minutes: initialData?.duration_minutes || 60,
@@ -87,6 +92,15 @@ export default function SessionForm({
       },
     },
   })
+
+  // Update selected type based on initial data or current values
+  useEffect(() => {
+    if (initialData?.group_id) {
+      setSelectedType('group')
+    } else if (initialData?.patient_id) {
+      setSelectedType('patient')
+    }
+  }, [initialData])
 
   const serviceTypeId = useWatch({ control, name: 'service_type_id' })
   const recurrence = useWatch({ control, name: 'recurrence' })
@@ -137,19 +151,87 @@ export default function SessionForm({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-      <Select
-        id="patient_id"
-        label="Paziente *"
-        {...register('patient_id')}
-        error={errors.patient_id?.message}
-        options={[
-          { value: '', label: 'Seleziona un paziente...' },
-          ...patients.map((p) => ({
-            value: p.id,
-            label: `${p.last_name} ${p.first_name}`,
-          })),
-        ]}
-      />
+      {/* Patient/Group Type Selector */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Tipo di Seduta *</label>
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedType('patient')
+              setValue('group_id', '')
+              setValue('session_type', 'individuale')
+            }}
+            className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              selectedType === 'patient'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-foreground hover:bg-secondary/70'
+            }`}
+          >
+            Individuale
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedType('group')
+              setValue('patient_id', '')
+            }}
+            className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              selectedType === 'group'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-foreground hover:bg-secondary/70'
+            }`}
+          >
+            <Users className="w-4 h-4 inline mr-1" />
+            Gruppo
+          </button>
+        </div>
+      </div>
+
+      {/* Patient Selection */}
+      {selectedType === 'patient' && (
+        <Select
+          id="patient_id"
+          label="Paziente *"
+          {...register('patient_id')}
+          error={errors.patient_id?.message}
+          options={[
+            { value: '', label: 'Seleziona un paziente...' },
+            ...patients.map((p) => ({
+              value: p.id,
+              label: `${p.last_name || ''}${p.last_name && p.first_name ? ' ' : ''}${p.first_name}`,
+            })),
+          ]}
+        />
+      )}
+
+      {/* Group Selection */}
+      {selectedType === 'group' && (
+        <>
+          <Select
+            id="group_id"
+            label="Gruppo *"
+            {...register('group_id')}
+            error={errors.group_id?.message}
+            options={[
+              { value: '', label: 'Seleziona un gruppo...' },
+              ...patientGroups.map((g) => ({
+                value: g.id,
+                label: `${g.name} (${g.type === 'couple' ? 'Coppia' : g.type === 'family' ? 'Famiglia' : 'Altro'})`,
+              })),
+            ]}
+          />
+          <Select
+            id="session_type"
+            label="Tipo di Seduta *"
+            {...register('session_type')}
+            options={[
+              { value: 'coppia', label: 'Di Coppia' },
+              { value: 'familiare', label: 'Familiare' },
+            ]}
+          />
+        </>
+      )}
 
       <Select
         id="service_type_id"
@@ -207,7 +289,8 @@ export default function SessionForm({
       )}
 
       {/* Recurrence section: shown for new sessions and for existing non-recurring sessions */}
-      {showRecurrenceSection && (
+      {/* Only available for individual sessions */}
+      {showRecurrenceSection && selectedType === 'patient' && (
         <div className="border-t border-border pt-4">
           <button
             type="button"
@@ -394,9 +477,9 @@ export default function SessionForm({
         </div>
       )}
 
-      {patients.length === 0 && (
+      {patients.length === 0 && patientGroups.length === 0 && (
         <div className="bg-orange-500/10 text-orange-600 p-3 rounded-lg text-sm">
-          Nessun paziente trovato. Aggiungi prima un paziente nella sezione Pazienti.
+          Nessun paziente o gruppo trovato. Aggiungi prima un paziente o un gruppo.
         </div>
       )}
 
@@ -462,7 +545,7 @@ export default function SessionForm({
           <Button
             type="submit"
             loading={loading}
-            disabled={patients.length === 0 || serviceTypes.length === 0}
+            disabled={patients.length === 0 && patientGroups.length === 0 || serviceTypes.length === 0}
             className="w-full sm:w-auto"
           >
             {initialData

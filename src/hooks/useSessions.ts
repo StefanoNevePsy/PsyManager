@@ -86,7 +86,11 @@ export const useCreateSession = () => {
       if (!recurrence || !recurrence.enabled) {
         const { data, error } = await supabase
           .from('sessions')
-          .insert({ ...sessionData, user_id: user.id })
+          .insert({
+            ...sessionData,
+            user_id: user.id,
+            session_type: sessionData.session_type || 'individuale'
+          })
           .select('*, patients(*), service_types(*)')
           .single()
 
@@ -110,6 +114,10 @@ export const useCreateSession = () => {
       })
 
       if (occurrences.length === 0) throw new Error('Nessuna occorrenza generata')
+
+      if (!sessionData.patient_id) {
+        throw new Error('Patient is required for recurring sessions')
+      }
 
       const seriesPayload: Omit<SessionSeriesInsert, 'user_id'> & { user_id: string } = {
         user_id: user.id,
@@ -138,7 +146,9 @@ export const useCreateSession = () => {
       const sessionsToInsert = occurrences.map((occurrence) => ({
         user_id: user.id,
         patient_id: sessionData.patient_id,
+        group_id: sessionData.group_id,
         service_type_id: sessionData.service_type_id,
+        session_type: sessionData.session_type || 'individuale',
         series_id: series.id,
         scheduled_at: occurrence.toISOString(),
         duration_minutes: sessionData.duration_minutes,
@@ -286,6 +296,7 @@ export const useConvertSessionToSeries = () => {
           duration_minutes: durationMinutes,
           notes: notes ?? undefined,
         }))
+        // Note: group_id and session_type are preserved from the original session update below
         const { error: insertError } = await supabase
           .from('sessions')
           .insert(sessionsToInsert)

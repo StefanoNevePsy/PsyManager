@@ -156,7 +156,9 @@ export default function SessionsPage() {
   const handleSubmit = async (data: SessionFormData) => {
     try {
       const cleanData = {
-        patient_id: data.patient_id,
+        patient_id: data.patient_id || undefined,
+        group_id: data.group_id || undefined,
+        session_type: data.session_type,
         service_type_id: data.service_type_id,
         scheduled_at: data.scheduled_at,
         duration_minutes: data.duration_minutes,
@@ -173,7 +175,7 @@ export default function SessionsPage() {
         if (isConvertingToSeries && data.recurrence) {
           const result = await convertToSeriesMutation.mutateAsync({
             sessionId: editing.id,
-            patientId: cleanData.patient_id,
+            patientId: cleanData.patient_id || '',
             serviceTypeId: cleanData.service_type_id,
             scheduledAt: cleanData.scheduled_at,
             durationMinutes: cleanData.duration_minutes,
@@ -188,6 +190,8 @@ export default function SessionsPage() {
             id: editing.id,
             updates: {
               patient_id: cleanData.patient_id,
+              group_id: cleanData.group_id,
+              session_type: cleanData.session_type,
               service_type_id: cleanData.service_type_id,
               scheduled_at: cleanData.scheduled_at,
               duration_minutes: cleanData.duration_minutes,

@@ -243,7 +243,11 @@ export default function WeeklyTimelineView({
                         new Date(session.scheduled_at),
                         'HH:mm'
                       )}—${format(end, 'HH:mm')} · ${
-                        session.patients?.last_name ?? ''
+                        session.group_id
+                          ? session.session_type === 'coppia'
+                            ? 'Seduta di Coppia'
+                            : 'Seduta Familiare'
+                          : session.patients?.last_name ?? ''
                       } · ${session.service_types?.name ?? ''}`}
                     >
                       <div className="text-[10px] sm:text-xs font-semibold leading-tight truncate">
@@ -254,9 +258,13 @@ export default function WeeklyTimelineView({
                       </div>
                       <div className="text-[10px] sm:text-2xs opacity-90 truncate leading-tight flex items-center gap-1">
                         <span className="truncate">
-                          {session.patients?.last_name}
+                          {session.group_id
+                            ? session.session_type === 'coppia'
+                              ? 'Coppia'
+                              : 'Famiglia'
+                            : session.patients?.last_name}
                         </span>
-                        {showBalDot && (
+                        {session.patient_id && showBalDot && (
                           <span
                             className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                               bal > 0 ? 'bg-destructive' : 'bg-success'

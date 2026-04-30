@@ -86,7 +86,7 @@ export interface Database {
           id: string
           user_id: string
           first_name: string
-          last_name: string
+          last_name?: string | null
           email?: string
           phone?: string
           notes?: string
@@ -99,7 +99,7 @@ export interface Database {
           id?: string
           user_id: string
           first_name: string
-          last_name: string
+          last_name?: string | null
           email?: string
           phone?: string
           notes?: string
@@ -110,7 +110,7 @@ export interface Database {
         }
         Update: {
           first_name?: string
-          last_name?: string
+          last_name?: string | null
           email?: string
           phone?: string
           notes?: string
@@ -154,6 +154,8 @@ export interface Database {
           user_id: string
           patient_id: string
           service_type_id: string
+          group_id?: string | null
+          session_type: 'individuale' | 'coppia' | 'familiare'
           series_id?: string | null
           scheduled_at: string
           duration_minutes: number
@@ -165,8 +167,10 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
-          patient_id: string
+          patient_id?: string
           service_type_id: string
+          group_id?: string | null
+          session_type?: 'individuale' | 'coppia' | 'familiare'
           series_id?: string | null
           scheduled_at: string
           duration_minutes: number
@@ -178,6 +182,8 @@ export interface Database {
         Update: {
           patient_id?: string
           service_type_id?: string
+          group_id?: string | null
+          session_type?: 'individuale' | 'coppia' | 'familiare'
           series_id?: string | null
           scheduled_at?: string
           duration_minutes?: number

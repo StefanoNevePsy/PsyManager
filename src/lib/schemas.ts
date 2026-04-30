@@ -26,7 +26,7 @@ export type FamilyMemberFormData = z.infer<typeof familyMemberSchema>
 
 export const patientSchema = z.object({
   first_name: z.string().min(1, 'Il nome è obbligatorio').max(100),
-  last_name: z.string().min(1, 'Il cognome è obbligatorio').max(100),
+  last_name: z.string().max(100).optional().or(z.literal('')),
   email: z.string().email('Email non valida').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
@@ -106,17 +106,27 @@ export const recurrenceSchema = z.object({
 
 export type RecurrenceFormData = z.infer<typeof recurrenceSchema>
 
-export const sessionSchema = z.object({
-  patient_id: z.string().min(1, 'Il paziente è obbligatorio'),
-  service_type_id: z.string().min(1, 'Il tipo di prestazione è obbligatorio'),
-  scheduled_at: z.string().min(1, 'La data è obbligatoria'),
-  duration_minutes: z
-    .number({ message: 'Inserisci una durata valida' })
-    .int()
-    .min(1, 'La durata deve essere maggiore di 0'),
-  notes: z.string().optional().or(z.literal('')),
-  recurrence: recurrenceSchema.optional(),
-})
+export const sessionSchema = z
+  .object({
+    patient_id: z.string().optional().or(z.literal('')),
+    group_id: z.string().optional().or(z.literal('')),
+    session_type: z.enum(['individuale', 'coppia', 'familiare']),
+    service_type_id: z.string().min(1, 'Il tipo di prestazione è obbligatorio'),
+    scheduled_at: z.string().min(1, 'La data è obbligatoria'),
+    duration_minutes: z
+      .number({ message: 'Inserisci una durata valida' })
+      .int()
+      .min(1, 'La durata deve essere maggiore di 0'),
+    notes: z.string().optional().or(z.literal('')),
+    recurrence: recurrenceSchema.optional(),
+  })
+  .refine(
+    (data) => data.patient_id || data.group_id,
+    {
+      message: 'Seleziona un paziente o un gruppo',
+      path: ['patient_id'],
+    }
+  )
 
 export type SessionFormData = z.infer<typeof sessionSchema>
 

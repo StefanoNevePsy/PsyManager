@@ -154,7 +154,7 @@ export default function PatientsPage() {
       results = results.filter(
         (p) =>
           p.first_name.toLowerCase().includes(term) ||
-          p.last_name.toLowerCase().includes(term) ||
+          p.last_name?.toLowerCase().includes(term) ||
           p.email?.toLowerCase().includes(term) ||
           p.phone?.toLowerCase().includes(term)
       )

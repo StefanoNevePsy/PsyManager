@@ -69,7 +69,7 @@ export default function PaymentsPage() {
     return payments.filter(
       (p) =>
         p.patients?.first_name.toLowerCase().includes(term) ||
-        p.patients?.last_name.toLowerCase().includes(term) ||
+        p.patients?.last_name?.toLowerCase().includes(term) ||
         p.notes?.toLowerCase().includes(term)
     )
   }, [payments, searchTerm])

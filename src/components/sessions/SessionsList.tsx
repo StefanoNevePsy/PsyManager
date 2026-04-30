@@ -86,9 +86,17 @@ export default function SessionsList({
                       <div className="flex items-center gap-2 mb-2">
                         <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <span className="font-semibold truncate">
-                          {session.patients?.last_name} {session.patients?.first_name}
+                          {session.group_id ? (
+                            <span className="italic">
+                              {session.session_type === 'coppia' ? 'Seduta di Coppia' : 'Seduta Familiare'}
+                            </span>
+                          ) : (
+                            `${session.patients?.last_name || ''} ${session.patients?.first_name || ''}`
+                          )}
                         </span>
-                        <BalanceDot balance={balanceMap.get(session.patient_id) || 0} />
+                        {session.patient_id && (
+                          <BalanceDot balance={balanceMap.get(session.patient_id) || 0} />
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <span

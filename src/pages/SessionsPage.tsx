@@ -55,17 +55,26 @@ export default function SessionsPage() {
   const [diarySession, setDiarySession] = useState<SessionWithRelations | null>(null)
   const [pendingEditId, setPendingEditId] = useState<string | null>(null)
 
-  // Handle navigation from dashboard: capture the requested session id,
-  // set currentDate so the right month is loaded, then wait for sessions
+  const [pendingOpenPayment, setPendingOpenPayment] = useState(false)
+
+  // Handle navigation from dashboard, widget or reminder notifications: capture
+  // the requested session id, set currentDate so the right month is loaded,
+  // then wait for sessions. If the navigation requested the payment modal
+  // (from a post-session reminder), open that too once the session is found.
   useEffect(() => {
     const state = location.state as
-      | { editSessionId?: string; editSessionDate?: string }
+      | {
+          editSessionId?: string
+          editSessionDate?: string
+          openPayment?: boolean
+        }
       | null
     if (state?.editSessionId) {
       if (state.editSessionDate) {
         setCurrentDate(new Date(state.editSessionDate))
       }
       setPendingEditId(state.editSessionId)
+      if (state.openPayment) setPendingOpenPayment(true)
       // Clear navigation state so navigating back doesn't reopen the modal
       window.history.replaceState({}, '')
     }
@@ -86,16 +95,28 @@ export default function SessionsPage() {
     dateRange.end
   )
 
-  // Once sessions are loaded, open the modal for the pending edit id
+  // Once sessions are loaded, open the modal for the pending edit id. If the
+  // navigation also requested the payment modal (post-session reminder), open
+  // the payment dialog instead of the edit form.
   useEffect(() => {
     if (!pendingEditId || isLoading) return
     const session = sessions.find((s) => s.id === pendingEditId)
     if (session) {
-      setEditing(session)
-      setModalOpen(true)
+      if (pendingOpenPayment && session.service_types?.type === 'private') {
+        const sessionPrice = Number(session.service_types?.price || 0)
+        const previousBalance = balanceMap.get(session.patient_id) || 0
+        const suggested = Math.max(0, sessionPrice + previousBalance)
+        setPayingSession(session)
+        setPaymentAmount(suggested.toFixed(2))
+      } else {
+        setEditing(session)
+        setModalOpen(true)
+      }
       setPendingEditId(null)
+      setPendingOpenPayment(false)
     }
-  }, [pendingEditId, sessions, isLoading])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEditId, sessions, isLoading, pendingOpenPayment])
 
   const createMutation = useCreateSession()
   const updateMutation = useUpdateSession()

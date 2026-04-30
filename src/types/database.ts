@@ -439,6 +439,35 @@ export interface Database {
           updated_at?: string
         }
       }
+      reminder_settings: {
+        Row: {
+          id: string
+          user_id: string
+          pre_session_enabled: boolean
+          pre_session_minutes: number
+          post_session_enabled: boolean
+          post_session_minutes: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          pre_session_enabled?: boolean
+          pre_session_minutes?: number
+          post_session_enabled?: boolean
+          post_session_minutes?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          pre_session_enabled?: boolean
+          pre_session_minutes?: number
+          post_session_enabled?: boolean
+          post_session_minutes?: number
+          updated_at?: string
+        }
+      }
       attachments: {
         Row: {
           id: string

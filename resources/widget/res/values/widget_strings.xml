@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_today_sessions">Sedute di oggi</string>
+    <string name="widget_no_sessions_today">Nessuna seduta in programma oggi</string>
+    <string name="widget_refresh">Aggiorna</string>
+    <string name="widget_balance_indicator">Stato pagamento</string>
+    <string name="widget_description">Sedute di oggi e stato pagamenti</string>
+    <string name="widget_sessions_label">Sedute oggi</string>
+</resources>

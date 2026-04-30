@@ -4,6 +4,9 @@ import { Capacitor } from '@capacitor/core'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/stores/authStore'
 import { useGoogleCalendarLifecycle } from '@/hooks/useGoogleCalendarLifecycle'
+import { useDeepLinks } from '@/hooks/useDeepLinks'
+import { useSessionsWidget } from '@/hooks/useSessionsWidget'
+import { useRemindersSync } from '@/hooks/useRemindersSync'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
@@ -55,6 +58,38 @@ const persister = createSyncStoragePersister({
 const basename =
   import.meta.env.PROD && !Capacitor.isNativePlatform() ? '/PsyManager' : ''
 
+// Hooks that depend on the router and on authenticated React Query data are
+// mounted inside <Router> via this component.
+function AppRoutes() {
+  useDeepLinks()
+  useSessionsWidget()
+  useRemindersSync()
+
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/patients" element={<PatientsPage />} />
+        <Route path="/sessions" element={<SessionsPage />} />
+        <Route path="/clinical-notes" element={<ClinicalNotesPage />} />
+        <Route path="/service-types" element={<ServiceTypesPage />} />
+        <Route path="/structures" element={<StructuresPage />} />
+        <Route path="/payments" element={<PaymentsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  )
+}
+
 function App() {
   const { mounted } = useTheme()
   const { initialize } = useAuthStore()
@@ -76,27 +111,7 @@ function App() {
       <ToastProvider>
         <PWAUpdatePrompt />
         <Router basename={basename}>
-          <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/patients" element={<PatientsPage />} />
-            <Route path="/sessions" element={<SessionsPage />} />
-            <Route path="/clinical-notes" element={<ClinicalNotesPage />} />
-            <Route path="/service-types" element={<ServiceTypesPage />} />
-            <Route path="/structures" element={<StructuresPage />} />
-            <Route path="/payments" element={<PaymentsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
+          <AppRoutes />
         </Router>
       </ToastProvider>
     </PersistQueryClientProvider>

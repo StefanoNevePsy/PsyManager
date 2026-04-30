@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Save, Calendar, Shield, User, AlertCircle, Check, Cloud } from 'lucide-react'
+import { Save, Calendar, Shield, User, AlertCircle, Check, Cloud, Bell } from 'lucide-react'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useUserProfile } from '@/hooks/useUserProfile'
-import { Button, Card, Input, PageHeader, useToast } from '@/components/ui'
+import {
+  useReminderSettings,
+  useUpsertReminderSettings,
+  DEFAULT_REMINDER_SETTINGS,
+} from '@/hooks/useReminderSettings'
+import { ensureNotificationPermission } from '@/lib/reminders'
+import { Button, Card, Input, Select, PageHeader, useToast } from '@/components/ui'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -22,6 +28,47 @@ export default function SettingsPage() {
     fullName: '',
     email: user?.email || '',
   })
+
+  const { data: reminderSettings } = useReminderSettings()
+  const { mutateAsync: saveReminderSettings, isPending: isSavingReminders } =
+    useUpsertReminderSettings()
+  const [reminderForm, setReminderForm] = useState({
+    pre_session_enabled: DEFAULT_REMINDER_SETTINGS.pre_session_enabled,
+    pre_session_minutes: DEFAULT_REMINDER_SETTINGS.pre_session_minutes,
+    post_session_enabled: DEFAULT_REMINDER_SETTINGS.post_session_enabled,
+    post_session_minutes: DEFAULT_REMINDER_SETTINGS.post_session_minutes,
+  })
+
+  useEffect(() => {
+    if (reminderSettings) {
+      setReminderForm({
+        pre_session_enabled: reminderSettings.pre_session_enabled,
+        pre_session_minutes: reminderSettings.pre_session_minutes,
+        post_session_enabled: reminderSettings.post_session_enabled,
+        post_session_minutes: reminderSettings.post_session_minutes,
+      })
+    }
+  }, [reminderSettings])
+
+  const handleSaveReminders = async () => {
+    try {
+      // Ask for notification permission if any reminder is enabled
+      if (reminderForm.pre_session_enabled || reminderForm.post_session_enabled) {
+        const granted = await ensureNotificationPermission()
+        if (!granted && /Android/i.test(navigator.userAgent)) {
+          toast.warning('Permesso notifiche negato', {
+            description: 'Abilita le notifiche nelle impostazioni di sistema per ricevere i promemoria.',
+          })
+        }
+      }
+      await saveReminderSettings(reminderForm)
+      toast.success('Promemoria salvati')
+    } catch (error) {
+      toast.error('Errore nel salvataggio', {
+        description: error instanceof Error ? error.message : 'Riprova',
+      })
+    }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -155,6 +202,123 @@ export default function SettingsPage() {
               Collega Google Calendar
             </Button>
           )}
+        </div>
+      </Card>
+
+      {/* Reminders */}
+      <Card>
+        <div className="flex items-center gap-2 mb-5">
+          <Bell className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+          <h2 className="font-display text-xl font-semibold tracking-tight">
+            Promemoria
+          </h2>
+        </div>
+
+        <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
+          Ricevi notifiche locali sul telefono prima delle sedute e per
+          ricordare di registrare il pagamento. Funziona anche con l'app
+          chiusa (solo Android).
+        </p>
+
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reminderForm.pre_session_enabled}
+                onChange={(e) =>
+                  setReminderForm({
+                    ...reminderForm,
+                    pre_session_enabled: e.target.checked,
+                  })
+                }
+                className="mt-0.5 w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <div className="flex-1">
+                <p className="font-medium text-sm">Promemoria prima della seduta</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Notifica per prepararti alla seduta in arrivo.
+                </p>
+              </div>
+            </label>
+            {reminderForm.pre_session_enabled && (
+              <div className="ml-7">
+                <Select
+                  label="Quanto tempo prima"
+                  value={String(reminderForm.pre_session_minutes)}
+                  onChange={(e) =>
+                    setReminderForm({
+                      ...reminderForm,
+                      pre_session_minutes: Number(e.target.value),
+                    })
+                  }
+                  options={[
+                    { value: '5', label: '5 minuti prima' },
+                    { value: '15', label: '15 minuti prima' },
+                    { value: '30', label: '30 minuti prima' },
+                    { value: '60', label: '1 ora prima' },
+                    { value: '120', label: '2 ore prima' },
+                    { value: '1440', label: '1 giorno prima' },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3 pt-3 border-t border-border">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reminderForm.post_session_enabled}
+                onChange={(e) =>
+                  setReminderForm({
+                    ...reminderForm,
+                    post_session_enabled: e.target.checked,
+                  })
+                }
+                className="mt-0.5 w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <div className="flex-1">
+                <p className="font-medium text-sm">Ricorda di inserire il pagamento</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Solo per le sedute private. Tap sulla notifica per aprire
+                  direttamente il modale di pagamento.
+                </p>
+              </div>
+            </label>
+            {reminderForm.post_session_enabled && (
+              <div className="ml-7">
+                <Select
+                  label="Quanto tempo dopo la fine"
+                  value={String(reminderForm.post_session_minutes)}
+                  onChange={(e) =>
+                    setReminderForm({
+                      ...reminderForm,
+                      post_session_minutes: Number(e.target.value),
+                    })
+                  }
+                  options={[
+                    { value: '0', label: 'Subito alla fine' },
+                    { value: '5', label: '5 minuti dopo' },
+                    { value: '15', label: '15 minuti dopo' },
+                    { value: '30', label: '30 minuti dopo' },
+                    { value: '60', label: '1 ora dopo' },
+                  ]}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              onClick={handleSaveReminders}
+              loading={isSavingReminders}
+              disabled={isSavingReminders}
+            >
+              <Save className="w-4 h-4" strokeWidth={2} />
+              Salva promemoria
+            </Button>
+          </div>
         </div>
       </Card>
 

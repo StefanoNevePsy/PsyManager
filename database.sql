@@ -381,3 +381,40 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_auth_user();
+
+-- ---------------------------------------------------------------------------
+-- Reminder settings: one row per user with notification preferences
+-- ---------------------------------------------------------------------------
+create table if not exists public.reminder_settings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade unique,
+  pre_session_enabled boolean not null default true,
+  pre_session_minutes integer not null default 30,
+  post_session_enabled boolean not null default false,
+  post_session_minutes integer not null default 30,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.reminder_settings enable row level security;
+
+create policy "Users can view own reminder settings"
+  on public.reminder_settings for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own reminder settings"
+  on public.reminder_settings for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own reminder settings"
+  on public.reminder_settings for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own reminder settings"
+  on public.reminder_settings for delete
+  using (auth.uid() = user_id);
+
+create index if not exists reminder_settings_user_id_idx on public.reminder_settings(user_id);
+
+create trigger reminder_settings_updated_at_trigger before update on public.reminder_settings
+  for each row execute function public.update_updated_at_column();

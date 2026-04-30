@@ -15,12 +15,15 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ANDROID_RES="$PROJECT_ROOT/android/app/src/main/res"
+ANDROID_APP_SRC="$PROJECT_ROOT/android/app/src/main"
+ANDROID_RES="$ANDROID_APP_SRC/res"
+ANDROID_JAVA="$ANDROID_APP_SRC/java"
 RESOURCES="$PROJECT_ROOT/resources"
 ANDROID_RES_SRC="$RESOURCES/android-res"
+WIDGET_SRC="$RESOURCES/widget"
 ICON_SVG="$RESOURCES/icon.svg"
 ICON_FOREGROUND_SVG="$RESOURCES/icon-foreground.svg"
-MANIFEST="$PROJECT_ROOT/android/app/src/main/AndroidManifest.xml"
+MANIFEST="$ANDROID_APP_SRC/AndroidManifest.xml"
 APP_GRADLE="$PROJECT_ROOT/android/app/build.gradle"
 
 VERSION_CODE="${VERSION_CODE:-1}"
@@ -91,8 +94,19 @@ for dir in "${!DENSITIES[@]}"; do
 done
 
 # Splash and store icons (used by Capacitor's splash plugin if needed)
-mkdir -p "$ANDROID_RES/drawable"
+mkdir -p "$ANDROID_RES/drawable" "$ANDROID_RES/drawable-nodpi"
 generate_png "$ICON_SVG" "$ANDROID_RES/drawable/splash.png" 1024 || true
+# Also generate a higher-res splash for xxxhdpi devices
+generate_png "$ICON_SVG" "$ANDROID_RES/drawable-nodpi/splash.png" 1200 || true
+
+# Notification icon: small white icon for Android 5+. Generate from the
+# foreground image. Keep it white/opaque since Android will colorize it.
+echo "  - Generating notification icon from foreground SVG"
+for dir in "${!DENSITIES[@]}"; do
+    size="${DENSITIES[$dir]}"
+    mkdir -p "$ANDROID_RES/$dir"
+    generate_png "$ICON_FOREGROUND_SVG" "$ANDROID_RES/$dir/ic_notification.png" "$size" || true
+done
 
 # ---------------------------------------------------------------------------
 # 3) Patch AndroidManifest.xml for predictive back gestures (Android 13+ / 14)
@@ -139,6 +153,178 @@ content = p.read_text()
 content = re.sub(r'versionCode\s+\d+',   f'versionCode {$VERSION_CODE}', content)
 content = re.sub(r'versionName\s+"[^"]*"', f'versionName "$VERSION_NAME"', content)
 p.write_text(content)
+PYEOF
+
+# ---------------------------------------------------------------------------
+# 5) Install the home-screen widget (Kotlin sources, layouts, drawables, xml)
+# ---------------------------------------------------------------------------
+echo "  - Installing home-screen widget (sessions of the day)"
+
+WIDGET_PKG_DIR="$ANDROID_JAVA/com/psymanager/app/widget"
+mkdir -p "$WIDGET_PKG_DIR"
+cp "$WIDGET_SRC"/java/com/psymanager/app/widget/*.kt "$WIDGET_PKG_DIR/"
+
+cp "$WIDGET_SRC"/res/layout/widget_sessions.xml      "$ANDROID_RES/layout/"
+cp "$WIDGET_SRC"/res/layout/widget_session_item.xml  "$ANDROID_RES/layout/"
+
+mkdir -p "$ANDROID_RES/drawable" "$ANDROID_RES/xml"
+cp "$WIDGET_SRC"/res/drawable/widget_background.xml      "$ANDROID_RES/drawable/"
+cp "$WIDGET_SRC"/res/drawable/widget_item_bg.xml         "$ANDROID_RES/drawable/"
+cp "$WIDGET_SRC"/res/drawable/widget_item_bg_completed.xml "$ANDROID_RES/drawable/"
+cp "$WIDGET_SRC"/res/drawable/widget_balance_dot.xml     "$ANDROID_RES/drawable/"
+cp "$WIDGET_SRC"/res/drawable/widget_ic_refresh.xml      "$ANDROID_RES/drawable/"
+cp "$WIDGET_SRC"/res/xml/widget_sessions_info.xml        "$ANDROID_RES/xml/"
+cp "$WIDGET_SRC"/res/values/widget_strings.xml           "$ANDROID_RES/values/"
+
+# Make sure the build.gradle compiles Kotlin sources (Capacitor's default Java
+# Android module needs the kotlin-android plugin and kotlin-stdlib dependency).
+echo "  - Ensuring Kotlin support is enabled in app/build.gradle"
+
+python3 - <<PYEOF
+import re, pathlib
+p = pathlib.Path("$APP_GRADLE")
+content = p.read_text()
+
+if "kotlin-android" not in content:
+    # Add Kotlin Android plugin after the com.android.application plugin line
+    content = re.sub(
+        r"(apply plugin: ['\"]com\.android\.application['\"])",
+        r"\1\napply plugin: 'kotlin-android'",
+        content,
+        count=1,
+    )
+
+if "kotlin-stdlib" not in content:
+    # Add Kotlin stdlib to the dependencies block
+    content = re.sub(
+        r"(dependencies\s*\{)",
+        r"\1\n    implementation \"org.jetbrains.kotlin:kotlin-stdlib:1.9.24\"",
+        content,
+        count=1,
+    )
+
+p.write_text(content)
+PYEOF
+
+# Some Capacitor template versions don't add the Kotlin Gradle plugin to the
+# project-level build.gradle classpath — make sure it's there.
+ROOT_GRADLE="$PROJECT_ROOT/android/build.gradle"
+if [ -f "$ROOT_GRADLE" ]; then
+    python3 - <<PYEOF
+import re, pathlib
+p = pathlib.Path("$ROOT_GRADLE")
+content = p.read_text()
+if "kotlin-gradle-plugin" not in content:
+    content = re.sub(
+        r"(classpath ['\"]com\.android\.tools\.build:gradle:[^'\"]+['\"])",
+        r"\1\n        classpath \"org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24\"",
+        content,
+        count=1,
+    )
+    p.write_text(content)
+PYEOF
+fi
+
+# ---------------------------------------------------------------------------
+# 6a) Patch MainActivity to register the custom WidgetPlugin. Capacitor only
+#     auto-discovers plugins from npm packages, not from app-local sources.
+# ---------------------------------------------------------------------------
+echo "  - Registering WidgetPlugin in MainActivity"
+
+MAIN_ACTIVITY_JAVA="$ANDROID_JAVA/com/psymanager/app/MainActivity.java"
+if [ -f "$MAIN_ACTIVITY_JAVA" ]; then
+    python3 - <<PYEOF
+import re, pathlib
+p = pathlib.Path("$MAIN_ACTIVITY_JAVA")
+content = p.read_text()
+
+if "WidgetPlugin" not in content:
+    # Add the import for our plugin
+    content = re.sub(
+        r"(import com\.getcapacitor\.BridgeActivity;)",
+        r"\1\nimport android.os.Bundle;\nimport com.psymanager.app.widget.WidgetPlugin;",
+        content,
+        count=1,
+    )
+    # Replace the empty class body with one that registers our plugin
+    content = re.sub(
+        r"(public class MainActivity extends BridgeActivity\s*\{)\s*\}",
+        (
+            r"\1\n"
+            "    @Override\n"
+            "    public void onCreate(Bundle savedInstanceState) {\n"
+            "        registerPlugin(WidgetPlugin.class);\n"
+            "        super.onCreate(savedInstanceState);\n"
+            "    }\n"
+            "}"
+        ),
+        content,
+        count=1,
+    )
+    p.write_text(content)
+PYEOF
+fi
+
+# ---------------------------------------------------------------------------
+# 6b) Patch AndroidManifest.xml: register the widget receiver, the RemoteViews
+#     service, and the deep-link intent-filter on MainActivity.
+# ---------------------------------------------------------------------------
+echo "  - Registering widget receiver, service and deep-link in AndroidManifest"
+
+export MANIFEST
+python3 - <<'PYEOF'
+import re, pathlib, os
+
+manifest_path = pathlib.Path(os.environ["MANIFEST"])
+content = manifest_path.read_text()
+
+# 6a) Add the deep-link intent-filter to the existing MainActivity (if missing)
+if 'psymanager' not in content:
+    deep_link = (
+        '\n            <intent-filter android:autoVerify="false">'
+        '\n                <action android:name="android.intent.action.VIEW" />'
+        '\n                <category android:name="android.intent.category.DEFAULT" />'
+        '\n                <category android:name="android.intent.category.BROWSABLE" />'
+        '\n                <data android:scheme="psymanager" />'
+        '\n            </intent-filter>'
+    )
+    # Insert just before </activity> for MainActivity
+    content = re.sub(
+        r'(<activity\b[^>]*\.MainActivity[^>]*>)([\s\S]*?)(</activity>)',
+        lambda m: m.group(1) + m.group(2) + deep_link + '\n        ' + m.group(3),
+        content,
+        count=1,
+    )
+
+# 6b) Add the widget receiver + RemoteViewsService inside <application> (if missing)
+if 'SessionsWidgetProvider' not in content:
+    widget_block = (
+        '\n        <receiver'
+        '\n            android:name="com.psymanager.app.widget.SessionsWidgetProvider"'
+        '\n            android:exported="false">'
+        '\n            <intent-filter>'
+        '\n                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />'
+        '\n                <action android:name="com.psymanager.app.widget.ACTION_REFRESH" />'
+        '\n                <action android:name="com.psymanager.app.widget.ACTION_DAILY_TICK" />'
+        '\n            </intent-filter>'
+        '\n            <meta-data'
+        '\n                android:name="android.appwidget.provider"'
+        '\n                android:resource="@xml/widget_sessions_info" />'
+        '\n        </receiver>'
+        '\n        <service'
+        '\n            android:name="com.psymanager.app.widget.SessionsWidgetService"'
+        '\n            android:permission="android.permission.BIND_REMOTEVIEWS"'
+        '\n            android:exported="false" />'
+    )
+    # Insert before the closing </application>
+    content = re.sub(
+        r'(</application>)',
+        widget_block + r'\n    \1',
+        content,
+        count=1,
+    )
+
+manifest_path.write_text(content)
 PYEOF
 
 echo "==> Android setup complete."

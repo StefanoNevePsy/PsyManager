@@ -94,8 +94,19 @@ for dir in "${!DENSITIES[@]}"; do
 done
 
 # Splash and store icons (used by Capacitor's splash plugin if needed)
-mkdir -p "$ANDROID_RES/drawable"
+mkdir -p "$ANDROID_RES/drawable" "$ANDROID_RES/drawable-nodpi"
 generate_png "$ICON_SVG" "$ANDROID_RES/drawable/splash.png" 1024 || true
+# Also generate a higher-res splash for xxxhdpi devices
+generate_png "$ICON_SVG" "$ANDROID_RES/drawable-nodpi/splash.png" 1200 || true
+
+# Notification icon: small white icon for Android 5+. Generate from the
+# foreground image. Keep it white/opaque since Android will colorize it.
+echo "  - Generating notification icon from foreground SVG"
+for dir in "${!DENSITIES[@]}"; do
+    size="${DENSITIES[$dir]}"
+    mkdir -p "$ANDROID_RES/$dir"
+    generate_png "$ICON_FOREGROUND_SVG" "$ANDROID_RES/$dir/ic_notification.png" "$size" || true
+done
 
 # ---------------------------------------------------------------------------
 # 3) Patch AndroidManifest.xml for predictive back gestures (Android 13+ / 14)

@@ -17,6 +17,9 @@ export const useRemindersSync = () => {
   const { data: settings } = useReminderSettings()
 
   useEffect(() => {
-    void syncReminders(sessions, settings ?? null)
+    // Defensive: never let reminder sync errors crash the app
+    syncReminders(sessions, settings ?? null).catch(() => {
+      // ignore
+    })
   }, [sessions, settings])
 }

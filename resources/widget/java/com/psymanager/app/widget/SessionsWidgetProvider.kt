@@ -7,19 +7,26 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.widget.RemoteViews
 import com.psymanager.app.MainActivity
 import com.psymanager.app.R
 
 class SessionsWidgetProvider : AppWidgetProvider() {
 
+    private val tag = "SessionsWidget"
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
-        for (id in appWidgetIds) {
-            updateWidget(context, appWidgetManager, id)
+        try {
+            for (id in appWidgetIds) {
+                updateWidget(context, appWidgetManager, id)
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "onUpdate failed", e)
         }
         WidgetAlarmScheduler.scheduleDailyRefresh(context)
     }
@@ -35,30 +42,39 @@ class SessionsWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        when (intent.action) {
-            WidgetStorage.ACTION_REFRESH,
-            WidgetStorage.ACTION_DAILY_TICK -> {
-                redrawAll(context)
-                if (intent.action == WidgetStorage.ACTION_DAILY_TICK) {
-                    // Re-arm the alarm for the next day
-                    WidgetAlarmScheduler.scheduleDailyRefresh(context)
+        try {
+            super.onReceive(context, intent)
+            when (intent.action) {
+                WidgetStorage.ACTION_REFRESH,
+                WidgetStorage.ACTION_DAILY_TICK -> {
+                    redrawAll(context)
+                    if (intent.action == WidgetStorage.ACTION_DAILY_TICK) {
+                        // Re-arm the one-shot alarm for the next day
+                        WidgetAlarmScheduler.scheduleDailyRefresh(context)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            // Never let a widget broadcast crash the app process
+            Log.w(tag, "onReceive failed for action=${intent.action}", e)
         }
     }
 
     companion object {
         fun redrawAll(context: Context) {
-            val mgr = AppWidgetManager.getInstance(context)
-            val ids = mgr.getAppWidgetIds(
-                ComponentName(context, SessionsWidgetProvider::class.java)
-            )
-            for (id in ids) {
-                updateWidget(context, mgr, id)
-            }
-            if (ids.isNotEmpty()) {
-                mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_sessions_list)
+            try {
+                val mgr = AppWidgetManager.getInstance(context) ?: return
+                val ids = mgr.getAppWidgetIds(
+                    ComponentName(context, SessionsWidgetProvider::class.java)
+                )
+                for (id in ids) {
+                    updateWidget(context, mgr, id)
+                }
+                if (ids.isNotEmpty()) {
+                    mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_sessions_list)
+                }
+            } catch (e: Exception) {
+                Log.w("SessionsWidget", "redrawAll failed", e)
             }
         }
 

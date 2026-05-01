@@ -112,13 +112,18 @@ class SessionsRemoteViewsFactory(
 
     private fun loadTodaySessions(ctx: Context): List<WidgetSession> {
         val prefs = ctx.getSharedPreferences(WidgetStorage.PREFS_NAME, 0)
-        val json = prefs.getString(WidgetStorage.KEY_SESSIONS_JSON, null) ?: return emptyList()
+        val json = prefs.getString(WidgetStorage.KEY_SESSIONS_JSON, null)
+
+        android.util.Log.d("WidgetService", "loadTodaySessions: json=${json?.length} bytes")
+
+        if (json == null) return emptyList()
 
         val (todayStart, todayEnd) = todayBoundsMs()
         val out = mutableListOf<WidgetSession>()
 
         try {
             val arr = JSONArray(json)
+            android.util.Log.d("WidgetService", "Parsed ${arr.length()} sessions")
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val item = parseSession(obj) ?: continue
@@ -126,7 +131,9 @@ class SessionsRemoteViewsFactory(
                     out.add(item)
                 }
             }
-        } catch (_: Exception) {
+            android.util.Log.d("WidgetService", "Found ${out.size} sessions for today")
+        } catch (e: Exception) {
+            android.util.Log.e("WidgetService", "Error parsing sessions", e)
             return emptyList()
         }
 

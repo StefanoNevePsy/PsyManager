@@ -19,18 +19,37 @@ export const useSessionsWidget = () => {
   const balanceMap = usePatientBalanceMap()
 
   useEffect(() => {
-    const payload: WidgetSessionData[] = sessions.map((s) => ({
-      id: s.id,
-      scheduledAt: s.scheduled_at,
-      durationMinutes: s.duration_minutes,
-      patientName: s.patients
-        ? `${s.patients.last_name} ${s.patients.first_name}`.trim()
-        : '',
-      serviceName: s.service_types?.name ?? '',
-      balance: balanceMap.get(s.patient_id) ?? 0,
-    }))
+    try {
+      const payload: WidgetSessionData[] = sessions.map((s) => {
+        // Group sessions: show "Coppia" or "Famiglia" instead of patient name
+        let displayName = ''
+        if (s.group_id) {
+          displayName =
+            s.session_type === 'coppia'
+              ? 'Seduta di Coppia'
+              : s.session_type === 'familiare'
+                ? 'Seduta Familiare'
+                : 'Seduta di Gruppo'
+        } else if (s.patients) {
+          const last = s.patients.last_name ?? ''
+          const first = s.patients.first_name ?? ''
+          displayName = `${last} ${first}`.trim()
+        }
 
-    void updateWidgetSessions(payload)
+        return {
+          id: s.id,
+          scheduledAt: s.scheduled_at,
+          durationMinutes: s.duration_minutes,
+          patientName: displayName,
+          serviceName: s.service_types?.name ?? '',
+          balance: s.patient_id ? (balanceMap.get(s.patient_id) ?? 0) : 0,
+        }
+      })
+
+      void updateWidgetSessions(payload)
+    } catch {
+      // Defensive: never let widget sync crash the app
+    }
     // We intentionally re-push whenever the underlying queries change. The
     // payload is small and the plugin is a no-op on non-Android.
   }, [sessions, balanceMap])

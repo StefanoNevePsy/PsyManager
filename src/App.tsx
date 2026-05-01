@@ -50,7 +50,7 @@ const queryClient = new QueryClient({
 // cache after deploys when the data shape changes.
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
-  key: 'psymanager-query-cache',
+  key: 'psymanager-query-cache-v2',
 })
 
 // On the web the app lives under https://.../PsyManager/. In the Capacitor

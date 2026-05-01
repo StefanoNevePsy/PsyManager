@@ -49,9 +49,25 @@ const buildPendingReminders = (
   for (const s of sessions) {
     const start = new Date(s.scheduled_at).getTime()
     const end = start + s.duration_minutes * 60_000
-    const patient = s.patients
-      ? `${s.patients.last_name} ${s.patients.first_name}`.trim()
-      : 'Paziente'
+
+    // Build a human-readable label for the notification.
+    // Group sessions show "Seduta di Coppia"/"Familiare" instead of a name.
+    let patient: string
+    if (s.group_id) {
+      patient =
+        s.session_type === 'coppia'
+          ? 'Seduta di Coppia'
+          : s.session_type === 'familiare'
+            ? 'Seduta Familiare'
+            : 'Seduta di Gruppo'
+    } else if (s.patients) {
+      const last = s.patients.last_name ?? ''
+      const first = s.patients.first_name ?? ''
+      patient = `${last} ${first}`.trim() || 'Paziente'
+    } else {
+      patient = 'Paziente'
+    }
+
     const service = s.service_types?.name ?? ''
 
     if (settings.pre_session_enabled) {

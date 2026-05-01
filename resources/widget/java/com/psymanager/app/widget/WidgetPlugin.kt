@@ -11,25 +11,36 @@ class WidgetPlugin : Plugin() {
 
     @PluginMethod
     fun updateSessions(call: PluginCall) {
-        val sessionsArray = call.getArray("sessions")
-        if (sessionsArray == null) {
-            call.reject("Missing 'sessions' array")
-            return
+        try {
+            val sessionsArray = call.getArray("sessions")
+            if (sessionsArray == null) {
+                call.reject("Missing 'sessions' array")
+                return
+            }
+
+            android.util.Log.d("WidgetPlugin", "updateSessions called with ${sessionsArray.length()} items")
+
+            val context = context
+            val prefs = context.getSharedPreferences(WidgetStorage.PREFS_NAME, 0)
+            val jsonString = sessionsArray.toString()
+            prefs.edit()
+                .putString(WidgetStorage.KEY_SESSIONS_JSON, jsonString)
+                .putLong(WidgetStorage.KEY_UPDATED_AT, System.currentTimeMillis())
+                .apply()
+
+            android.util.Log.d("WidgetPlugin", "Saved ${jsonString.length} bytes to prefs")
+
+            SessionsWidgetProvider.redrawAll(context)
+            android.util.Log.d("WidgetPlugin", "redrawAll called")
+
+            // Make sure the daily midnight alarm is scheduled
+            WidgetAlarmScheduler.scheduleDailyRefresh(context)
+
+            call.resolve()
+        } catch (e: Exception) {
+            android.util.Log.e("WidgetPlugin", "updateSessions failed", e)
+            call.reject("updateSessions failed: ${e.message}")
         }
-
-        val context = context
-        val prefs = context.getSharedPreferences(WidgetStorage.PREFS_NAME, 0)
-        prefs.edit()
-            .putString(WidgetStorage.KEY_SESSIONS_JSON, sessionsArray.toString())
-            .putLong(WidgetStorage.KEY_UPDATED_AT, System.currentTimeMillis())
-            .apply()
-
-        SessionsWidgetProvider.redrawAll(context)
-
-        // Make sure the daily midnight alarm is scheduled
-        WidgetAlarmScheduler.scheduleDailyRefresh(context)
-
-        call.resolve()
     }
 
     @PluginMethod

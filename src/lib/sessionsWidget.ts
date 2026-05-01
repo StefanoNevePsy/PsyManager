@@ -23,9 +23,11 @@ const isSupported = () =>
 export const updateWidgetSessions = async (sessions: WidgetSessionData[]) => {
   if (!isSupported()) return
   try {
+    console.log(`[Widget] Updating ${sessions.length} sessions`)
     await SessionsWidget.updateSessions({ sessions })
-  } catch {
-    // Plugin may not be installed yet on older builds — ignore
+    console.log('[Widget] Update successful')
+  } catch (err) {
+    console.error('[Widget] Failed to update sessions:', err)
   }
 }
 

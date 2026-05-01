@@ -3,6 +3,7 @@ import { startOfDay, endOfDay, addDays } from 'date-fns'
 import { useSessions } from './useSessions'
 import { usePatientBalanceMap } from './usePayments'
 import { updateWidgetSessions, WidgetSessionData } from '@/lib/sessionsWidget'
+import { useAuth } from './useAuth'
 
 /**
  * Keeps the Android home-screen widget in sync with today's sessions and the
@@ -12,6 +13,7 @@ import { updateWidgetSessions, WidgetSessionData } from '@/lib/sessionsWidget'
  * midnight the widget can roll over without needing a new push.
  */
 export const useSessionsWidget = () => {
+  const { user } = useAuth()
   const today = startOfDay(new Date())
   const tomorrow = endOfDay(addDays(today, 1))
 
@@ -19,6 +21,9 @@ export const useSessionsWidget = () => {
   const balanceMap = usePatientBalanceMap()
 
   useEffect(() => {
+    // Only update widget once user is authenticated and data is loaded
+    if (!user) return
+
     try {
       const payload: WidgetSessionData[] = sessions.map((s) => {
         // Group sessions: show "Coppia" or "Famiglia" instead of patient name
@@ -47,10 +52,9 @@ export const useSessionsWidget = () => {
       })
 
       void updateWidgetSessions(payload)
-    } catch {
-      // Defensive: never let widget sync crash the app
+    } catch (err) {
+      // Log errors for debugging but don't crash
+      console.error('[Widget] Error updating sessions:', err)
     }
-    // We intentionally re-push whenever the underlying queries change. The
-    // payload is small and the plugin is a no-op on non-Android.
-  }, [sessions, balanceMap])
+  }, [user, sessions, balanceMap])
 }

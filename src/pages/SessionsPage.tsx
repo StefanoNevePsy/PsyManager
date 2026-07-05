@@ -11,11 +11,13 @@ import {
   useSessions,
   useCreateSession,
   useUpdateSession,
+  useUpdateSessionScoped,
   useDeleteSession,
   useDeleteSessionScoped,
   useConvertSessionToSeries,
   SessionWithRelations,
   DeleteScope,
+  UpdateScope,
 } from '@/hooks/useSessions'
 import {
   Button,
@@ -55,6 +57,8 @@ export default function SessionsPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [diarySession, setDiarySession] = useState<SessionWithRelations | null>(null)
   const [pendingEditId, setPendingEditId] = useState<string | null>(null)
+  // Edits to a recurring session wait here while the user picks the scope
+  const [pendingScopedData, setPendingScopedData] = useState<SessionFormData | null>(null)
 
   const [pendingOpenPayment, setPendingOpenPayment] = useState(false)
 
@@ -118,6 +122,7 @@ export default function SessionsPage() {
 
   const createMutation = useCreateSession()
   const updateMutation = useUpdateSession()
+  const updateScopedMutation = useUpdateSessionScoped()
   const deleteMutation = useDeleteSession()
   const deleteScopedMutation = useDeleteSessionScoped()
   const convertToSeriesMutation = useConvertSessionToSeries()
@@ -210,6 +215,11 @@ export default function SessionsPage() {
           toast.success(`${result.occurrencesCount} sedute pianificate`, {
             description: 'La seduta originale è ora la prima della serie',
           })
+        } else if (editing.series_id) {
+          // Recurring session: let the user choose the scope (this occurrence
+          // only, or this and all the following ones) before saving.
+          setPendingScopedData(data)
+          return
         } else {
           const savedSession = await updateMutation.mutateAsync({
             id: editing.id,
@@ -259,6 +269,62 @@ export default function SessionsPage() {
         }
       }
 
+      setModalOpen(false)
+      setEditing(null)
+      setDefaultDate(undefined)
+    } catch (error) {
+      toast.error('Salvataggio fallito', {
+        description: error instanceof Error ? error.message : 'Riprova tra qualche istante',
+      })
+    }
+  }
+
+  // Apply a pending edit to a recurring session with the chosen scope
+  const applyScopedUpdate = async (scope: UpdateScope) => {
+    if (!editing || !pendingScopedData) return
+    const data = pendingScopedData
+    try {
+      const result = await updateScopedMutation.mutateAsync({
+        sessionId: editing.id,
+        seriesId: editing.series_id,
+        originalScheduledAt: editing.scheduled_at,
+        scope,
+        updates: {
+          patient_id: data.patient_id || null,
+          group_id: data.group_id || null,
+          session_type: data.session_type,
+          status: data.status || 'scheduled',
+          service_type_id: data.service_type_id,
+          scheduled_at: data.scheduled_at,
+          duration_minutes: data.duration_minutes,
+          notes: data.notes || null,
+        },
+      })
+
+      toast.success(
+        scope === 'one'
+          ? 'Seduta aggiornata'
+          : `${result.updatedSessions.length} sedute aggiornate`
+      )
+
+      // Best-effort push of every touched occurrence to Google Calendar
+      if (isConnected()) {
+        const toPush = result.updatedSessions
+          .filter((s) => s.status !== 'cancelled')
+          .slice(0, 30)
+        let pushed = 0
+        for (const s of toPush) {
+          try {
+            await pushSessionToCalendar(s)
+            pushed++
+          } catch {
+            // non-fatal — the next auto-sync will retry
+          }
+        }
+        if (pushed > 0) toast.info('Sincronizzate su Google Calendar')
+      }
+
+      setPendingScopedData(null)
       setModalOpen(false)
       setEditing(null)
       setDefaultDate(undefined)
@@ -574,6 +640,57 @@ export default function SessionsPage() {
               loading={deleteScopedMutation.isPending || deleteMutation.isPending}
             >
               Elimina
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Update-scope modal for recurring sessions (stacks over the form) */}
+      <Modal
+        isOpen={!!pendingScopedData}
+        onClose={() => setPendingScopedData(null)}
+        title="Modifica seduta ricorrente"
+        description="A quali sedute vuoi applicare le modifiche?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => applyScopedUpdate('one')}
+              disabled={updateScopedMutation.isPending}
+              className="w-full flex items-start gap-3 p-3 rounded-md border border-border text-left hover:border-foreground/20 hover:bg-secondary/40 transition-colors"
+            >
+              <div>
+                <p className="font-medium text-sm">Solo questa seduta</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Le altre occorrenze della serie restano invariate
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => applyScopedUpdate('this_and_following')}
+              disabled={updateScopedMutation.isPending}
+              className="w-full flex items-start gap-3 p-3 rounded-md border border-border text-left hover:border-foreground/20 hover:bg-secondary/40 transition-colors"
+            >
+              <div>
+                <p className="font-medium text-sm">Questa e tutte le successive</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Un cambio di orario viene applicato come spostamento a ogni
+                  occorrenza futura (es. tutte spostate un'ora dopo). Lo stato
+                  vale solo per questa seduta.
+                </p>
+              </div>
+            </button>
+          </div>
+          <div className="flex justify-end pt-3 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={() => setPendingScopedData(null)}
+              disabled={updateScopedMutation.isPending}
+            >
+              Annulla
             </Button>
           </div>
         </div>

@@ -21,6 +21,7 @@ export type SessionWithRelations = Session & {
 }
 
 export type DeleteScope = 'one' | 'this_and_following' | 'all_future'
+export type UpdateScope = 'one' | 'this_and_following'
 
 // Every session read joins patient, service type and group so display
 // components never need extra fetches.
@@ -211,6 +212,150 @@ export const useUpdateSession = () => {
 
       if (error) throw error
       return data
+    },
+    onSuccess: () => {
+      invalidateSessionRelated(queryClient)
+    },
+  })
+}
+
+export interface ScopedSessionUpdates {
+  patient_id: string | null
+  group_id: string | null
+  session_type: 'individuale' | 'coppia' | 'familiare'
+  status: SessionStatus
+  service_type_id: string
+  scheduled_at: string
+  duration_minutes: number
+  notes: string | null
+}
+
+/**
+ * Update a session with series awareness.
+ * - 'one': update only this occurrence.
+ * - 'this_and_following': apply the changes to this and every future
+ *   occurrence of the series. A change of date/time is applied as a DELTA to
+ *   each following occurrence (Google Calendar semantics), so moving Tuesday
+ *   16:00 → 17:00 moves every following occurrence one hour later while
+ *   keeping its own day. Status is never bulk-applied (cancel via delete).
+ * Returns the updated sessions (with relations) so callers can push them to
+ * Google Calendar.
+ */
+export const useUpdateSessionScoped = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      seriesId,
+      originalScheduledAt,
+      scope,
+      updates,
+    }: {
+      sessionId: string
+      seriesId?: string | null
+      originalScheduledAt: string
+      scope: UpdateScope
+      updates: ScopedSessionUpdates
+    }): Promise<{ updatedSessions: SessionWithRelations[] }> => {
+      if (scope === 'one' || !seriesId) {
+        const { data, error } = await supabase
+          .from('sessions')
+          .update(updates)
+          .eq('id', sessionId)
+          .select(SESSION_SELECT)
+          .single()
+        if (error) throw error
+        return { updatedSessions: [data as SessionWithRelations] }
+      }
+
+      const timeDelta =
+        new Date(updates.scheduled_at).getTime() -
+        new Date(originalScheduledAt).getTime()
+
+      // Fields shared by every following occurrence. Status is intentionally
+      // excluded: it only ever applies to the clicked occurrence.
+      const shared = {
+        patient_id: updates.patient_id,
+        group_id: updates.group_id,
+        session_type: updates.session_type,
+        service_type_id: updates.service_type_id,
+        duration_minutes: updates.duration_minutes,
+        notes: updates.notes,
+      }
+
+      const { data: future, error: futureError } = await supabase
+        .from('sessions')
+        .select('id, scheduled_at')
+        .eq('series_id', seriesId)
+        .gte('scheduled_at', originalScheduledAt)
+        .order('scheduled_at', { ascending: true })
+      if (futureError) throw futureError
+
+      const rows = (future ?? []) as Array<{ id: string; scheduled_at: string }>
+
+      if (timeDelta === 0) {
+        const { error } = await supabase
+          .from('sessions')
+          .update(shared)
+          .eq('series_id', seriesId)
+          .gte('scheduled_at', originalScheduledAt)
+        if (error) throw error
+      } else {
+        // Per-row shift: each occurrence gets its own new timestamp
+        const BATCH = 10
+        for (let i = 0; i < rows.length; i += BATCH) {
+          const batch = rows.slice(i, i + BATCH)
+          const results = await Promise.all(
+            batch.map((row) =>
+              supabase
+                .from('sessions')
+                .update({
+                  ...shared,
+                  scheduled_at: new Date(
+                    new Date(row.scheduled_at).getTime() + timeDelta
+                  ).toISOString(),
+                })
+                .eq('id', row.id)
+            )
+          )
+          const failed = results.find((r) => r.error)
+          if (failed?.error) throw failed.error
+        }
+      }
+
+      // Status applies only to the clicked occurrence
+      const { error: statusError } = await supabase
+        .from('sessions')
+        .update({ status: updates.status })
+        .eq('id', sessionId)
+      if (statusError) throw statusError
+
+      // Keep the series rule row aligned for future top-ups
+      const { error: seriesError } = await supabase
+        .from('session_series')
+        .update({
+          patient_id: updates.patient_id,
+          group_id: updates.group_id,
+          session_type: updates.session_type,
+          service_type_id: updates.service_type_id,
+          duration_minutes: updates.duration_minutes,
+          notes: updates.notes,
+        })
+        .eq('id', seriesId)
+      if (seriesError) throw seriesError
+
+      // Refetch the affected rows with relations for the Calendar push
+      const ids = rows.map((r) => r.id)
+      if (ids.length === 0) return { updatedSessions: [] }
+      const { data: updated, error: refetchError } = await supabase
+        .from('sessions')
+        .select(SESSION_SELECT)
+        .in('id', ids)
+        .order('scheduled_at', { ascending: true })
+      if (refetchError) throw refetchError
+
+      return { updatedSessions: (updated ?? []) as SessionWithRelations[] }
     },
     onSuccess: () => {
       invalidateSessionRelated(queryClient)
@@ -428,6 +573,17 @@ export const useDeleteSessionScoped = () => {
         .select('id, google_calendar_event_id')
 
       if (error) throw error
+
+      // Close the series rule at the cutoff so the automatic horizon top-up
+      // (useSeriesMaintenance) never regenerates the deleted occurrences.
+      const cutoff = new Date(new Date(fromDate).getTime() - 24 * 60 * 60 * 1000)
+      const yyyy = cutoff.getFullYear()
+      const mm = String(cutoff.getMonth() + 1).padStart(2, '0')
+      const dd = String(cutoff.getDate()).padStart(2, '0')
+      await supabase
+        .from('session_series')
+        .update({ end_type: 'until', end_date: `${yyyy}-${mm}-${dd}` })
+        .eq('id', seriesId)
 
       let deletedCount = deleted?.length ?? 0
       const deletedEventIds = (deleted ?? [])

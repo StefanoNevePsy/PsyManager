@@ -4,10 +4,18 @@ import { RecurrenceFormData } from './schemas'
 // Maximum occurrences to generate when end_type is "never"
 const MAX_OCCURRENCES_INFINITE = 156 // ~3 years weekly
 const MAX_OCCURRENCES_TOTAL = 365 // Hard cap
+// In `until` mode the caller bounds by date, not count; the cap only guards
+// against runaway loops (e.g. daily series spanning years before the horizon)
+const MAX_OCCURRENCES_UNTIL = 2000
 
 export interface GenerateOccurrencesParams {
   startAt: Date
   recurrence: Omit<RecurrenceFormData, 'enabled'>
+  /**
+   * Generate up to this date (inclusive), overriding the default caps.
+   * Used to extend never-ending series past the initial materialization.
+   */
+  until?: Date
 }
 
 /**
@@ -17,19 +25,25 @@ export interface GenerateOccurrencesParams {
 export function generateOccurrences({
   startAt,
   recurrence,
+  until,
 }: GenerateOccurrencesParams): Date[] {
   const occurrences: Date[] = []
   const { frequency, interval_value, interval_unit, days_of_week, end_type, end_count, end_date } =
     recurrence
 
-  const maxCount =
-    end_type === 'count' && end_count
+  const maxCount = until
+    ? MAX_OCCURRENCES_UNTIL
+    : end_type === 'count' && end_count
       ? Math.min(end_count, MAX_OCCURRENCES_TOTAL)
       : end_type === 'never'
         ? MAX_OCCURRENCES_INFINITE
         : MAX_OCCURRENCES_TOTAL
 
-  const endDateObj = end_type === 'until' && end_date ? new Date(end_date + 'T23:59:59') : null
+  const endDateObj = until
+    ? until
+    : end_type === 'until' && end_date
+      ? new Date(end_date + 'T23:59:59')
+      : null
 
   // For weekly/biweekly with multiple days_of_week, we generate by week and pick days
   if ((frequency === 'weekly' || frequency === 'biweekly') && days_of_week.length > 0) {
@@ -79,26 +93,34 @@ export function generateOccurrences({
     return occurrences
   }
 
-  // Monthly recurrence
+  // Monthly recurrence.
+  // Always compute from the ORIGINAL anchor: cumulative addMonths would clamp
+  // Jan 31 → Feb 28 and then permanently drift to the 28th; anchoring keeps
+  // the 31st whenever the month allows it.
   if (frequency === 'monthly') {
-    let next = new Date(startAt)
+    let i = 0
     while (occurrences.length < maxCount) {
+      const next = addMonths(startAt, i * (interval_value || 1))
       if (endDateObj && isAfter(next, endDateObj)) break
-      occurrences.push(new Date(next))
-      next = addMonths(next, interval_value || 1)
+      occurrences.push(next)
+      i++
     }
     return occurrences
   }
 
-  // Custom recurrence
+  // Custom recurrence (anchor-based for the month unit, same clamping reason)
   if (frequency === 'custom') {
-    let next = new Date(startAt)
+    let i = 0
     while (occurrences.length < maxCount) {
+      const next =
+        interval_unit === 'day'
+          ? addDays(startAt, i * interval_value)
+          : interval_unit === 'week'
+            ? addWeeks(startAt, i * interval_value)
+            : addMonths(startAt, i * interval_value)
       if (endDateObj && isAfter(next, endDateObj)) break
-      occurrences.push(new Date(next))
-      if (interval_unit === 'day') next = addDays(next, interval_value)
-      else if (interval_unit === 'week') next = addWeeks(next, interval_value)
-      else next = addMonths(next, interval_value)
+      occurrences.push(next)
+      i++
     }
     return occurrences
   }

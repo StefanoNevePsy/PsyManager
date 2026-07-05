@@ -344,8 +344,8 @@ export default function SessionForm({
           <div>
             <p className="font-medium text-foreground">Parte di una serie ricorrente</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Le modifiche qui valgono solo per questa occorrenza. Per cambiare la
-              ricorrenza, elimina le occorrenze future dal pulsante elimina e ricreale.
+              Al salvataggio potrai scegliere se applicare le modifiche solo a
+              questa seduta o anche a tutte le successive della serie.
             </p>
           </div>
         </div>

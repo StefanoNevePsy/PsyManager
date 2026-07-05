@@ -111,6 +111,7 @@ export const sessionSchema = z
     patient_id: z.string().optional().or(z.literal('')),
     group_id: z.string().optional().or(z.literal('')),
     session_type: z.enum(['individuale', 'coppia', 'familiare']),
+    status: z.enum(['scheduled', 'completed', 'cancelled', 'no_show']).optional(),
     service_type_id: z.string().min(1, 'Il tipo di prestazione è obbligatorio'),
     scheduled_at: z.string().min(1, 'La data è obbligatoria'),
     duration_minutes: z
@@ -120,18 +121,45 @@ export const sessionSchema = z
     notes: z.string().optional().or(z.literal('')),
     recurrence: recurrenceSchema.optional(),
   })
-  .refine(
-    (data) => data.patient_id || data.group_id,
-    {
-      message: 'Seleziona un paziente o un gruppo',
-      path: ['patient_id'],
+  .superRefine((data, ctx) => {
+    const hasPatient = !!data.patient_id
+    const hasGroup = !!data.group_id
+    if (!hasPatient && !hasGroup) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Seleziona un paziente o un gruppo',
+        path: ['patient_id'],
+      })
     }
-  )
+    if (hasPatient && hasGroup) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Una seduta può avere un paziente O un gruppo, non entrambi',
+        path: ['group_id'],
+      })
+    }
+    // session_type must be consistent with the selected entity
+    if (hasGroup && data.session_type === 'individuale') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Scegli se la seduta è di coppia o familiare',
+        path: ['session_type'],
+      })
+    }
+    if (hasPatient && !hasGroup && data.session_type !== 'individuale') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Una seduta con un singolo paziente è individuale',
+        path: ['session_type'],
+      })
+    }
+  })
 
 export type SessionFormData = z.infer<typeof sessionSchema>
 
 export const paymentSchema = z.object({
   patient_id: z.string().optional().or(z.literal('')),
+  group_id: z.string().optional().or(z.literal('')),
   session_id: z.string().optional().or(z.literal('')),
   service_type_id: z.string().optional().or(z.literal('')),
   amount: z

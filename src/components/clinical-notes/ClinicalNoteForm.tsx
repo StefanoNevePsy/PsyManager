@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { clinicalNoteSchema, ClinicalNoteFormData } from '@/lib/schemas'
 import { Button, Input, Select, RichTextEditor } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
+import { patientFullName } from '@/lib/sessionDisplay'
 import { useSessions } from '@/hooks/useSessions'
 import AttachmentList from '@/components/attachments/AttachmentList'
 import { Database } from '@/types/database'
@@ -73,7 +74,7 @@ export default function ClinicalNoteForm({
           { value: '', label: 'Seleziona un paziente...' },
           ...patients.map((p) => ({
             value: p.id,
-            label: `${p.last_name} ${p.first_name}`,
+            label: patientFullName(p),
           })),
         ]}
       />

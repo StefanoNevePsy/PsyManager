@@ -161,6 +161,11 @@ class SessionsRemoteViewsFactory(
     }
 
     private fun parseIsoMs(iso: String): Long? {
+        // Postgres can emit 6-digit microseconds; SimpleDateFormat's SSS only
+        // handles exactly 3 digits. Truncate any longer fraction to 3 digits
+        // before parsing.
+        val normalized = iso.replace(Regex("(\\.\\d{3})\\d+"), "$1")
+
         // Accept common ISO-8601 forms (with or without milliseconds, Z or offset)
         val patterns = listOf(
             "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
@@ -172,7 +177,7 @@ class SessionsRemoteViewsFactory(
             try {
                 val sdf = SimpleDateFormat(p, Locale.US)
                 sdf.timeZone = TimeZone.getTimeZone("UTC")
-                return sdf.parse(iso)?.time
+                return sdf.parse(normalized)?.time
             } catch (_: Exception) {
                 // try next pattern
             }

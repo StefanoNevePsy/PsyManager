@@ -1,3 +1,7 @@
+export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+
+export type PaymentMethod = 'cash' | 'bank_transfer' | 'credit_card' | 'other'
+
 export interface Database {
   public: {
     Tables: {
@@ -152,43 +156,46 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          patient_id: string
+          patient_id: string | null
           service_type_id: string
           group_id?: string | null
           session_type: 'individuale' | 'coppia' | 'familiare'
+          status: SessionStatus
           series_id?: string | null
           scheduled_at: string
           duration_minutes: number
-          notes?: string
-          google_calendar_event_id?: string
+          notes?: string | null
+          google_calendar_event_id?: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          patient_id?: string
+          patient_id?: string | null
           service_type_id: string
           group_id?: string | null
           session_type?: 'individuale' | 'coppia' | 'familiare'
+          status?: SessionStatus
           series_id?: string | null
           scheduled_at: string
           duration_minutes: number
-          notes?: string
-          google_calendar_event_id?: string
+          notes?: string | null
+          google_calendar_event_id?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
-          patient_id?: string
+          patient_id?: string | null
           service_type_id?: string
           group_id?: string | null
           session_type?: 'individuale' | 'coppia' | 'familiare'
+          status?: SessionStatus
           series_id?: string | null
           scheduled_at?: string
           duration_minutes?: number
-          notes?: string
-          google_calendar_event_id?: string
+          notes?: string | null
+          google_calendar_event_id?: string | null
           updated_at?: string
         }
       }
@@ -196,7 +203,9 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          patient_id: string
+          patient_id: string | null
+          group_id?: string | null
+          session_type: 'individuale' | 'coppia' | 'familiare'
           service_type_id: string
           frequency: 'weekly' | 'biweekly' | 'monthly' | 'custom'
           interval_value: number
@@ -214,7 +223,9 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
-          patient_id: string
+          patient_id?: string | null
+          group_id?: string | null
+          session_type?: 'individuale' | 'coppia' | 'familiare'
           service_type_id: string
           frequency: 'weekly' | 'biweekly' | 'monthly' | 'custom'
           interval_value?: number
@@ -247,34 +258,37 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          patient_id?: string
-          session_id?: string
+          patient_id?: string | null
+          group_id?: string | null
+          session_id?: string | null
           amount: number
           payment_date: string
-          payment_method: string
-          notes?: string
+          payment_method: PaymentMethod
+          notes?: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          patient_id?: string
-          session_id?: string
+          patient_id?: string | null
+          group_id?: string | null
+          session_id?: string | null
           amount: number
           payment_date: string
-          payment_method: string
-          notes?: string
+          payment_method: PaymentMethod
+          notes?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
-          patient_id?: string
-          session_id?: string
+          patient_id?: string | null
+          group_id?: string | null
+          session_id?: string | null
           amount?: number
           payment_date?: string
-          payment_method?: string
-          notes?: string
+          payment_method?: PaymentMethod
+          notes?: string | null
           updated_at?: string
         }
       }

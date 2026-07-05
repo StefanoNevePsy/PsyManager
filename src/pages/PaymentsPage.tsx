@@ -33,6 +33,7 @@ import {
   useToast,
 } from '@/components/ui'
 import PaymentForm from '@/components/payments/PaymentForm'
+import { patientFullName } from '@/lib/sessionDisplay'
 import { PaymentFormData } from '@/lib/schemas'
 
 const paymentMethodLabels = {
@@ -70,6 +71,7 @@ export default function PaymentsPage() {
       (p) =>
         p.patients?.first_name.toLowerCase().includes(term) ||
         p.patients?.last_name?.toLowerCase().includes(term) ||
+        p.patient_groups?.name?.toLowerCase().includes(term) ||
         p.notes?.toLowerCase().includes(term)
     )
   }, [payments, searchTerm])
@@ -276,7 +278,11 @@ export default function PaymentsPage() {
                             {format(new Date(p.payment_date), 'd MMM yyyy', { locale: it })}
                           </td>
                           <td className="py-3 px-5 text-foreground">
-                            {p.patients ? `${p.patients.last_name} ${p.patients.first_name}` : '—'}
+                            {p.group_id
+                              ? p.patient_groups?.name || 'Gruppo'
+                              : p.patients
+                                ? patientFullName(p.patients)
+                                : '—'}
                           </td>
                           <td className="py-3 px-5 text-muted-foreground">
                             {paymentMethodLabels[p.payment_method as keyof typeof paymentMethodLabels] || p.payment_method}
@@ -345,9 +351,11 @@ export default function PaymentsPage() {
                           </Button>
                         </div>
                       </div>
-                      {p.patients && (
+                      {(p.patients || p.patient_groups) && (
                         <p className="text-sm text-foreground">
-                          {p.patients.last_name} {p.patients.first_name}
+                          {p.group_id
+                            ? p.patient_groups?.name || 'Gruppo'
+                            : patientFullName(p.patients)}
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">
@@ -386,7 +394,14 @@ export default function PaymentsPage() {
                       className="p-4 md:p-5 flex items-center gap-4 flex-wrap hover:bg-secondary/30 transition-colors"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground truncate">{b.patientName}</p>
+                        <p className="font-medium text-foreground truncate">
+                          {b.patientName}
+                          {b.entityType === 'group' && (
+                            <span className="ml-2 text-2xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-semibold uppercase tracking-wider">
+                              Gruppo
+                            </span>
+                          )}
+                        </p>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1 tabular-nums">
                           <span>{b.sessionsCount} sedute</span>
                           <span>·</span>

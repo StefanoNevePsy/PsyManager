@@ -25,6 +25,7 @@ import {
   useToast,
 } from '@/components/ui'
 import ClinicalNoteForm from '@/components/clinical-notes/ClinicalNoteForm'
+import { patientFullName } from '@/lib/sessionDisplay'
 
 export default function ClinicalNotesPage() {
   const { toast } = useToast()
@@ -138,7 +139,7 @@ export default function ClinicalNotesPage() {
               { value: '', label: 'Tutti i pazienti' },
               ...patients.map((p) => ({
                 value: p.id,
-                label: `${p.last_name} ${p.first_name}`,
+                label: patientFullName(p),
               })),
             ]}
           />
@@ -213,7 +214,7 @@ export default function ClinicalNotesPage() {
                   )}
                   {note.patients && (
                     <p className="text-sm text-muted-foreground">
-                      {note.patients.last_name} {note.patients.first_name}
+                      {patientFullName(note.patients)}
                     </p>
                   )}
                 </div>

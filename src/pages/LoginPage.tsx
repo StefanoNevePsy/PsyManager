@@ -37,13 +37,18 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const from = (location.state as { from?: Location })?.from?.pathname || '/'
+  // Preserve BOTH the path and its navigation state: a deep link (widget or
+  // notification tap) that lands here while logged out carries the target
+  // session in from.state — dropping it would lose the deep link after login.
+  const fromLocation = (location.state as { from?: Location & { state?: unknown } })?.from
+  const from = fromLocation?.pathname || '/'
+  const fromState = fromLocation?.state
 
   useEffect(() => {
     if (initialized && isAuthenticated) {
-      navigate(from, { replace: true })
+      navigate(from, { state: fromState, replace: true })
     }
-  }, [initialized, isAuthenticated, navigate, from])
+  }, [initialized, isAuthenticated, navigate, from, fromState])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +60,7 @@ export default function LoginPage() {
       if (mode === 'login') {
         const { error } = await signIn(email, password)
         if (error) throw error
-        navigate(from, { replace: true })
+        navigate(from, { state: fromState, replace: true })
       } else if (mode === 'signup') {
         if (password !== confirmPassword) throw new Error('Le password non coincidono')
         if (password.length < 8) throw new Error('La password deve essere di almeno 8 caratteri')

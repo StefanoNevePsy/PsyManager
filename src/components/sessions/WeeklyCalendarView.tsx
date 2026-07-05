@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
+import { sessionShortName } from '@/lib/sessionDisplay'
 
 interface Props {
   currentDate: Date
@@ -132,14 +133,14 @@ export default function WeeklyCalendarView({
                         e.currentTarget.style.backgroundColor =
                           color.pillStyle.backgroundColor
                       }}
-                      title={`${session.patients?.last_name} — ${session.service_types?.name}`}
+                      title={`${sessionShortName(session)} — ${session.service_types?.name}`}
                     >
                       <div className="font-semibold">
                         {format(new Date(session.scheduled_at), 'HH:mm')}—
                         {format(endTime, 'HH:mm')}
                       </div>
                       <div className="truncate text-2xs opacity-90">
-                        {session.patients?.last_name}
+                        {sessionShortName(session)}
                       </div>
                     </button>
                   )

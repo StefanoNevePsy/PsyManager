@@ -14,6 +14,7 @@ import { Button } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
 import { usePatientBalanceMap } from '@/hooks/usePayments'
+import { sessionShortName, sessionDisplayName, SESSION_STATUS_LABELS } from '@/lib/sessionDisplay'
 
 // Helper to detect mobile breakpoint (matches Tailwind's md: 768px)
 const useIsMobile = () => {
@@ -219,13 +220,17 @@ export default function WeeklyTimelineView({
                     new Date(session.scheduled_at),
                     session.duration_minutes
                   )
-                  const bal = balanceMap.get(session.patient_id) || 0
+                  const bal = balanceMap.get(session.patient_id ?? session.group_id ?? '') || 0
                   const showBalDot = Math.abs(bal) >= 0.01
+                  const inactive =
+                    session.status === 'cancelled' || session.status === 'no_show'
                   return (
                     <button
                       key={session.id}
                       onClick={() => onSessionClick(session)}
-                      className="absolute left-0.5 right-0.5 px-1 py-0.5 sm:p-2 rounded border text-left overflow-hidden transition-all hover:shadow-md cursor-pointer"
+                      className={`absolute left-0.5 right-0.5 px-1 py-0.5 sm:p-2 rounded border text-left overflow-hidden transition-all hover:shadow-md cursor-pointer ${
+                        inactive ? 'opacity-50' : ''
+                      }`}
                       style={{
                         ...getSessionStyle(session),
                         ...color.pillStyle,
@@ -242,13 +247,9 @@ export default function WeeklyTimelineView({
                       title={`${format(
                         new Date(session.scheduled_at),
                         'HH:mm'
-                      )}—${format(end, 'HH:mm')} · ${
-                        session.group_id
-                          ? session.session_type === 'coppia'
-                            ? 'Seduta di Coppia'
-                            : 'Seduta Familiare'
-                          : session.patients?.last_name ?? ''
-                      } · ${session.service_types?.name ?? ''}`}
+                      )}—${format(end, 'HH:mm')} · ${sessionDisplayName(session)} · ${
+                        session.service_types?.name ?? ''
+                      }${inactive ? ` · ${SESSION_STATUS_LABELS[session.status]}` : ''}`}
                     >
                       <div className="text-[10px] sm:text-xs font-semibold leading-tight truncate">
                         {format(new Date(session.scheduled_at), 'HH:mm')}
@@ -257,14 +258,10 @@ export default function WeeklyTimelineView({
                         )}
                       </div>
                       <div className="text-[10px] sm:text-2xs opacity-90 truncate leading-tight flex items-center gap-1">
-                        <span className="truncate">
-                          {session.group_id
-                            ? session.session_type === 'coppia'
-                              ? 'Coppia'
-                              : 'Famiglia'
-                            : session.patients?.last_name}
+                        <span className={`truncate ${inactive ? 'line-through' : ''}`}>
+                          {sessionShortName(session)}
                         </span>
-                        {session.patient_id && showBalDot && (
+                        {showBalDot && (
                           <span
                             className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                               bal > 0 ? 'bg-destructive' : 'bg-success'

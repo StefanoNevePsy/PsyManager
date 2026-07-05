@@ -33,7 +33,7 @@ create table if not exists public.patients (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
   first_name text not null,
-  last_name text not null,
+  last_name text,
   email text,
   phone text,
   notes text,
@@ -44,11 +44,13 @@ create table if not exists public.patients (
 );
 
 -- Clinical notes table (diario clinico)
+-- NOTE: session_id's FK to sessions is added AFTER the sessions table is
+-- created (see below) to avoid a forward reference on fresh installs.
 create table if not exists public.clinical_notes (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
   patient_id uuid not null references public.patients(id) on delete cascade,
-  session_id uuid references public.sessions(id) on delete set null,
+  session_id uuid,
   title text,
   content text not null,
   note_date date not null default current_date,
@@ -61,18 +63,21 @@ create table if not exists public.service_types (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
   name text not null,
-  duration_minutes integer not null default 60,
-  price numeric(10, 2) not null,
+  duration_minutes integer not null default 60 check (duration_minutes > 0),
+  price numeric(10, 2) not null check (price >= 0),
   type public.service_type not null default 'private'::public.service_type,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 -- Session series (defines a recurrence rule for a group of sessions)
+-- A series belongs to EITHER an individual patient OR a patient group.
 create table if not exists public.session_series (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
-  patient_id uuid not null references public.patients(id) on delete cascade,
+  patient_id uuid references public.patients(id) on delete cascade,
+  group_id uuid references public.patient_groups(id) on delete restrict,
+  session_type text not null default 'individuale' check (session_type in ('individuale', 'coppia', 'familiare')),
   service_type_id uuid not null references public.service_types(id) on delete restrict,
   frequency text not null check (frequency in ('weekly', 'biweekly', 'monthly', 'custom')),
   interval_value integer not null default 1 check (interval_value > 0),
@@ -85,23 +90,37 @@ create table if not exists public.session_series (
   duration_minutes integer not null,
   notes text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint session_series_patient_or_group_chk check (patient_id is not null or group_id is not null)
 );
 
 -- Sessions table
+-- A session belongs to EITHER an individual patient OR a patient group
+-- (couple/family), tracked by session_type.
 create table if not exists public.sessions (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
-  patient_id uuid not null references public.patients(id) on delete cascade,
+  patient_id uuid references public.patients(id) on delete cascade,
+  group_id uuid references public.patient_groups(id) on delete restrict,
+  session_type text not null default 'individuale' check (session_type in ('individuale', 'coppia', 'familiare')),
   service_type_id uuid not null references public.service_types(id) on delete restrict,
   series_id uuid references public.session_series(id) on delete set null,
   scheduled_at timestamp with time zone not null,
   duration_minutes integer not null,
+  status text not null default 'scheduled' check (status in ('scheduled', 'completed', 'cancelled', 'no_show')),
   notes text,
   google_calendar_event_id text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint sessions_patient_or_group_chk check (patient_id is not null or group_id is not null)
 );
+
+-- Now that sessions exists, wire up the clinical_notes FK (see note above)
+alter table public.clinical_notes
+  drop constraint if exists clinical_notes_session_id_fkey;
+alter table public.clinical_notes
+  add constraint clinical_notes_session_id_fkey
+  foreign key (session_id) references public.sessions(id) on delete set null;
 
 -- Structures table (for package work)
 create table if not exists public.structures (
@@ -118,10 +137,10 @@ create table if not exists public.package_agreements (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
   structure_id uuid not null references public.structures(id) on delete cascade,
-  total_sessions integer not null,
+  total_sessions integer not null check (total_sessions > 0),
   completed_sessions integer not null default 0,
-  total_price numeric(10, 2) not null,
-  paid_amount numeric(10, 2) not null default 0,
+  total_price numeric(10, 2) not null check (total_price >= 0),
+  paid_amount numeric(10, 2) not null default 0 check (paid_amount >= 0),
   start_date date not null,
   end_date date,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
@@ -133,8 +152,9 @@ create table if not exists public.payments (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade,
   patient_id uuid references public.patients(id) on delete set null,
+  group_id uuid references public.patient_groups(id) on delete set null,
   session_id uuid references public.sessions(id) on delete set null,
-  amount numeric(10, 2) not null,
+  amount numeric(10, 2) not null check (amount > 0),
   payment_date date not null,
   payment_method public.payment_method not null default 'cash'::public.payment_method,
   notes text,
@@ -208,7 +228,11 @@ create index if not exists patients_user_id_idx on public.patients(user_id);
 create index if not exists service_types_user_id_idx on public.service_types(user_id);
 create index if not exists sessions_user_id_idx on public.sessions(user_id);
 create index if not exists sessions_patient_id_idx on public.sessions(patient_id);
+create index if not exists sessions_group_id_idx on public.sessions(group_id);
 create index if not exists sessions_scheduled_at_idx on public.sessions(scheduled_at);
+create index if not exists sessions_status_idx on public.sessions(status);
+create index if not exists session_series_group_id_idx on public.session_series(group_id);
+create index if not exists payments_group_id_idx on public.payments(group_id);
 create index if not exists structures_user_id_idx on public.structures(user_id);
 create index if not exists package_agreements_user_id_idx on public.package_agreements(user_id);
 create index if not exists package_agreements_structure_id_idx on public.package_agreements(structure_id);
@@ -293,6 +317,20 @@ create policy "Patient tag assignments visible to owner" on public.patient_tag_a
       select 1 from public.patient_tags pt
       where pt.id = tag_id and pt.user_id = auth.uid()
     )
+    and exists (
+      select 1 from public.patients p
+      where p.id = patient_id and p.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.patient_tags pt
+      where pt.id = tag_id and pt.user_id = auth.uid()
+    )
+    and exists (
+      select 1 from public.patients p
+      where p.id = patient_id and p.user_id = auth.uid()
+    )
   );
 
 create policy "Session series visible to owner" on public.session_series
@@ -325,6 +363,9 @@ begin
   return new;
 end;
 $$ language plpgsql;
+
+create trigger users_updated_at_trigger before update on public.users
+  for each row execute function public.update_updated_at_column();
 
 create trigger patients_updated_at_trigger before update on public.patients
   for each row execute function public.update_updated_at_column();

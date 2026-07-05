@@ -102,6 +102,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   initialize: async () => {
+    // Guard against double-invocation (HMR, remount)
+    if (authListenerAttached) return
+    authListenerAttached = true
+
     const {
       data: { session },
     } = await supabase.auth.getSession()
@@ -112,7 +116,21 @@ export const useAuthStore = create<AuthState>((set) => ({
       initialized: true,
     })
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
+      // Offline resilience: if the token refresh fails while offline the
+      // session comes back null WITHOUT an explicit SIGNED_OUT. Dropping the
+      // user would bounce them to a login screen they can't complete offline,
+      // even though all their data sits in the persisted cache. Keep the
+      // last-known session until we're back online or they truly sign out.
+      if (
+        !session &&
+        event !== 'SIGNED_OUT' &&
+        typeof navigator !== 'undefined' &&
+        navigator.onLine === false
+      ) {
+        console.warn('[auth] token refresh failed offline — keeping last session')
+        return
+      }
       set({
         session,
         user: session?.user ?? null,
@@ -120,3 +138,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     })
   },
 }))
+
+// Module-level so hot reloads don't attach duplicate listeners
+let authListenerAttached = false

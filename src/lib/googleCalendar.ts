@@ -348,31 +348,36 @@ export const deleteEvent = async (
 }
 
 export const sessionToGoogleEvent = (
-  patientName: string,
+  displayName: string,
   serviceName: string,
   scheduledAt: string,
   durationMinutes: number,
-  notes: string | undefined,
-  patientId: string,
+  notes: string | null | undefined,
+  patientId: string | null | undefined,
   serviceTypeId: string,
-  sessionId: string
+  sessionId: string,
+  groupId?: string | null
 ): GoogleCalendarEvent => {
   const start = new Date(scheduledAt)
   const end = new Date(start.getTime() + durationMinutes * 60000)
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
+  // Google requires string values here — never include null/undefined keys
+  const privateProps: Record<string, string> = {
+    appId: 'psymanager',
+    serviceTypeId,
+    sessionId,
+  }
+  if (patientId) privateProps.patientId = patientId
+  if (groupId) privateProps.groupId = groupId
+
   return {
-    summary: `[${serviceName}] ${patientName}`,
+    summary: `[${serviceName}] ${displayName}`,
     description: notes || '',
     start: { dateTime: start.toISOString(), timeZone: tz },
     end: { dateTime: end.toISOString(), timeZone: tz },
     extendedProperties: {
-      private: {
-        appId: 'psymanager',
-        patientId,
-        serviceTypeId,
-        sessionId,
-      },
+      private: privateProps,
     },
   }
 }

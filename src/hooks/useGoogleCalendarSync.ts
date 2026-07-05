@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { startOfDay, endOfDay } from 'date-fns'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import {
   listEvents,
@@ -12,6 +13,7 @@ import { useSessions, SessionWithRelations } from './useSessions'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './useAuth'
+import { sessionDisplayName } from '@/lib/sessionDisplay'
 
 // Sync window: ±N days from today. Limits the number of operations.
 const SYNC_DAYS_PAST = 90
@@ -27,10 +29,10 @@ export const useGoogleCalendarSync = () => {
   // Limit the sessions we operate on to a sane window —
   // an infinite recurrence could otherwise generate thousands of sessions
   // and the loop below would never finish.
-  const syncStart = new Date()
-  syncStart.setDate(syncStart.getDate() - SYNC_DAYS_PAST)
-  const syncEnd = new Date()
-  syncEnd.setDate(syncEnd.getDate() + SYNC_DAYS_FUTURE)
+  // Day-bounded so the React Query key stays stable across renders.
+  const now = new Date()
+  const syncStart = startOfDay(new Date(now.getTime() - SYNC_DAYS_PAST * 24 * 60 * 60 * 1000))
+  const syncEnd = endOfDay(new Date(now.getTime() + SYNC_DAYS_FUTURE * 24 * 60 * 60 * 1000))
 
   const { data: sessions = [] } = useSessions(syncStart, syncEnd)
   const [syncing, setSyncing] = useState(false)
@@ -42,16 +44,17 @@ export const useGoogleCalendarSync = () => {
     async (session: SessionWithRelations) => {
       if (!isConnected()) return null
 
-      const patientName = `${session.patients.last_name} ${session.patients.first_name}`
+      // Group-aware, null-safe title (group sessions have patients === null)
       const event = sessionToGoogleEvent(
-        patientName,
+        sessionDisplayName(session),
         session.service_types.name,
         session.scheduled_at,
         session.duration_minutes,
         session.notes,
         session.patient_id,
         session.service_type_id,
-        session.id
+        session.id,
+        session.group_id
       )
 
       try {
@@ -177,8 +180,34 @@ export const useGoogleCalendarSync = () => {
           })
         }
 
-        // Find sessions that need to be pushed (no google_calendar_event_id yet)
-        const sessionsToPush = sessions.filter((s) => !s.google_calendar_event_id)
+        // Detect events deleted directly on Google Calendar: a local session
+        // whose event id is no longer among the fetched events has a dangling
+        // reference. Clear it so the push below re-creates the event.
+        const fetchedEventIds = new Set(events.map((e) => e.id).filter(Boolean))
+        const danglingSessions = sessions.filter(
+          (s) =>
+            s.google_calendar_event_id &&
+            !fetchedEventIds.has(s.google_calendar_event_id) &&
+            new Date(s.scheduled_at) >= syncStart &&
+            new Date(s.scheduled_at) <= syncEnd
+        )
+        if (danglingSessions.length > 0) {
+          await runInBatches(danglingSessions, async (s) => {
+            await supabase
+              .from('sessions')
+              .update({ google_calendar_event_id: null })
+              .eq('id', s.id)
+          })
+        }
+        const danglingIds = new Set(danglingSessions.map((s) => s.id))
+
+        // Find sessions that need to be pushed (no google_calendar_event_id
+        // yet, or whose Google event was deleted remotely)
+        const sessionsToPush = sessions
+          .filter((s) => !s.google_calendar_event_id || danglingIds.has(s.id))
+          .map((s) =>
+            danglingIds.has(s.id) ? { ...s, google_calendar_event_id: undefined } : s
+          )
 
         if (sessionsToPush.length > MAX_OPERATIONS) {
           throw new Error(

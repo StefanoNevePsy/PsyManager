@@ -5,6 +5,7 @@ import { Button, EmptyState, Tooltip } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
 import { usePatientBalanceMap } from '@/hooks/usePayments'
+import { sessionDisplayName, SESSION_STATUS_LABELS } from '@/lib/sessionDisplay'
 import BalanceDot from '@/components/payments/BalanceDot'
 
 interface Props {
@@ -51,7 +52,10 @@ export default function SessionsList({
   return (
     <div className="space-y-6">
       {Object.entries(grouped).map(([day, daySessions]) => {
-        const date = new Date(day)
+        // Parse the 'yyyy-MM-dd' key as LOCAL midnight — new Date('yyyy-MM-dd')
+        // would parse as UTC and shift the header a day for west-of-UTC users
+        const [y, m, d] = day.split('-').map(Number)
+        const date = new Date(y, m - 1, d)
         const isToday = isSameDay(date, today)
         return (
           <div key={day}>
@@ -66,10 +70,14 @@ export default function SessionsList({
             <div className="space-y-2">
               {daySessions.map((session) => {
                 const color = getServiceColor(session.service_type_id)
+                const inactive =
+                  session.status === 'cancelled' || session.status === 'no_show'
                 return (
                 <div
                   key={session.id}
-                  className="border-l-4 border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors"
+                  className={`border-l-4 border border-border rounded-lg p-4 hover:bg-secondary/50 transition-colors ${
+                    inactive ? 'opacity-60' : ''
+                  }`}
                   style={{ borderLeftColor: color.hex }}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -85,18 +93,23 @@ export default function SessionsList({
                       </div>
                       <div className="flex items-center gap-2 mb-2">
                         <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        <span className="font-semibold truncate">
-                          {session.group_id ? (
-                            <span className="italic">
-                              {session.session_type === 'coppia' ? 'Seduta di Coppia' : 'Seduta Familiare'}
-                            </span>
-                          ) : (
-                            `${session.patients?.last_name || ''} ${session.patients?.first_name || ''}`
-                          )}
+                        <span
+                          className={`font-semibold truncate ${
+                            session.status === 'cancelled' ? 'line-through' : ''
+                          }`}
+                        >
+                          {sessionDisplayName(session)}
                         </span>
-                        {session.patient_id && (
-                          <BalanceDot balance={balanceMap.get(session.patient_id) || 0} />
+                        {inactive && (
+                          <span className="text-2xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-semibold uppercase tracking-wider flex-shrink-0">
+                            {SESSION_STATUS_LABELS[session.status]}
+                          </span>
                         )}
+                        <BalanceDot
+                          balance={
+                            balanceMap.get(session.patient_id ?? session.group_id ?? '') || 0
+                          }
+                        />
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <span

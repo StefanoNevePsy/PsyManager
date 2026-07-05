@@ -7,6 +7,7 @@ import {
   eachMonthOfInterval,
   subMonths,
 } from 'date-fns'
+import { patientFullName, sessionDisplayName, isBillableStatus } from '@/lib/sessionDisplay'
 
 export interface ReportData {
   totalIncome: number
@@ -58,8 +59,10 @@ export const useReports = (startDate: Date, endDate: Date) => {
         }
       }
 
-      const startStr = startDate.toISOString().split('T')[0]
-      const endStr = endDate.toISOString().split('T')[0]
+      // Local-calendar date strings: toISOString() would roll local midnight
+      // back into the previous day for UTC+ timezones (Italy)
+      const startStr = format(startDate, 'yyyy-MM-dd')
+      const endStr = format(endDate, 'yyyy-MM-dd')
 
       const [
         { data: payments },
@@ -67,13 +70,13 @@ export const useReports = (startDate: Date, endDate: Date) => {
       ] = await Promise.all([
         supabase
           .from('payments')
-          .select('*, patients(*)')
+          .select('*, patients(*), patient_groups(*)')
           .eq('user_id', user.id)
           .gte('payment_date', startStr)
           .lte('payment_date', endStr),
         supabase
           .from('sessions')
-          .select('*, patients(*), service_types(*)')
+          .select('*, patients(*), patient_groups(*), service_types(*)')
           .eq('user_id', user.id)
           .gte('scheduled_at', startDate.toISOString())
           .lte('scheduled_at', endDate.toISOString()),
@@ -91,6 +94,7 @@ export const useReports = (startDate: Date, endDate: Date) => {
 
       for (const session of sessions || []) {
         if (!session.service_types) continue
+        if (!isBillableStatus(session.status)) continue
         const key = session.service_type_id
         const existing = serviceTypeMap.get(key) || {
           name: session.service_types.name,
@@ -112,10 +116,11 @@ export const useReports = (startDate: Date, endDate: Date) => {
       >()
 
       for (const session of sessions || []) {
-        if (!session.patients) continue
-        const key = session.patient_id
+        if (!isBillableStatus(session.status)) continue
+        const key = session.patient_id ?? session.group_id
+        if (!key) continue
         const existing = patientMap.get(key) || {
-          name: `${session.patients.last_name} ${session.patients.first_name}`,
+          name: sessionDisplayName(session),
           sessionsCount: 0,
           income: 0,
         }
@@ -126,13 +131,18 @@ export const useReports = (startDate: Date, endDate: Date) => {
         patientMap.set(key, existing)
       }
 
+      // Entities (patients or groups) that only have payments in the period —
+      // no sessions — must still appear in the per-patient report.
       for (const payment of payments || []) {
-        if (!payment.patient_id || !payment.patients) continue
-        const key = payment.patient_id
-        const existing = patientMap.get(key)
-        if (existing) {
-          // already counted above
-        }
+        const key = payment.patient_id ?? payment.group_id
+        if (!key || patientMap.has(key)) continue
+        patientMap.set(key, {
+          name: payment.patient_id
+            ? patientFullName(payment.patients) || '-'
+            : payment.patient_groups?.name || 'Gruppo',
+          sessionsCount: 0,
+          income: 0,
+        })
       }
 
       // Monthly trend (last 6 months)
@@ -146,7 +156,7 @@ export const useReports = (startDate: Date, endDate: Date) => {
         .from('payments')
         .select('amount, payment_date')
         .eq('user_id', user.id)
-        .gte('payment_date', trendStart.toISOString().split('T')[0])
+        .gte('payment_date', format(trendStart, 'yyyy-MM-dd'))
 
       const { data: trendSessions } = await supabase
         .from('sessions')
@@ -176,9 +186,9 @@ export const useReports = (startDate: Date, endDate: Date) => {
       const paymentsList = (payments || []).map((p) => ({
         date: p.payment_date,
         amount: Number(p.amount),
-        patientName: p.patients
-          ? `${p.patients.last_name} ${p.patients.first_name}`
-          : '-',
+        patientName: p.group_id
+          ? p.patient_groups?.name || 'Gruppo'
+          : patientFullName(p.patients) || '-',
         method: p.payment_method,
         notes: p.notes || '',
       }))
@@ -200,6 +210,9 @@ export const useReports = (startDate: Date, endDate: Date) => {
   })
 }
 
+/** Quote a CSV field and escape internal quotes. */
+const csvEscape = (value: string) => `"${String(value).replace(/"/g, '""')}"`
+
 export const exportToCSV = (data: ReportData, filename: string) => {
   const lines: string[] = []
 
@@ -212,21 +225,21 @@ export const exportToCSV = (data: ReportData, filename: string) => {
   lines.push('Nome,Tipo,Sedute,Incasso')
   for (const item of data.byServiceType) {
     lines.push(
-      `"${item.name}","${item.type === 'private' ? 'Privato' : 'Pacchetto'}",${item.count},${item.income.toFixed(2)}`
+      `${csvEscape(item.name)},${csvEscape(item.type === 'private' ? 'Privato' : 'Pacchetto')},${item.count},${item.income.toFixed(2)}`
     )
   }
   lines.push('')
   lines.push('GUADAGNI PER PAZIENTE')
   lines.push('Paziente,Sedute,Incasso')
   for (const item of data.byPatient) {
-    lines.push(`"${item.name}",${item.sessionsCount},${item.income.toFixed(2)}`)
+    lines.push(`${csvEscape(item.name)},${item.sessionsCount},${item.income.toFixed(2)}`)
   }
   lines.push('')
   lines.push('PAGAMENTI')
   lines.push('Data,Paziente,Importo,Metodo,Note')
   for (const p of data.payments) {
     lines.push(
-      `${p.date},"${p.patientName}",${p.amount.toFixed(2)},${p.method},"${p.notes.replace(/"/g, '""')}"`
+      `${p.date},${csvEscape(p.patientName)},${p.amount.toFixed(2)},${p.method},${csvEscape(p.notes)}`
     )
   }
 

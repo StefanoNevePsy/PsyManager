@@ -1,5 +1,7 @@
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
 
+export type CalendarTitleFormat = 'full' | 'first_initial' | 'initials'
+
 export type PaymentMethod = 'cash' | 'bank_transfer' | 'credit_card' | 'other'
 
 export interface Database {
@@ -485,6 +487,29 @@ export interface Database {
           pre_session_minutes?: number
           post_session_enabled?: boolean
           post_session_minutes?: number
+          updated_at?: string
+        }
+      }
+      calendar_settings: {
+        Row: {
+          id: string
+          user_id: string
+          title_format: CalendarTitleFormat
+          color_by_service: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title_format?: CalendarTitleFormat
+          color_by_service?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          title_format?: CalendarTitleFormat
+          color_by_service?: boolean
           updated_at?: string
         }
       }

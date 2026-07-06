@@ -29,6 +29,10 @@ export interface GoogleCalendarEvent {
   extendedProperties?: {
     private?: Record<string, string>
   }
+  // Google Calendar's fixed colorId palette ('1'..'11'). Omitted when the
+  // user disables per-service coloring, or for older Google API responses
+  // that don't set it.
+  colorId?: string
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import { Database, SessionStatus } from '@/types/database'
+import { Database, SessionStatus, CalendarTitleFormat } from '@/types/database'
 
 type Patient = Database['public']['Tables']['patients']['Row']
 type PatientGroup = Database['public']['Tables']['patient_groups']['Row']
@@ -60,6 +60,50 @@ export const sessionShortName = (session: SessionLike): string => {
     return session.patient_groups?.name || sessionTypeLabel(session.session_type) || 'Gruppo'
   }
   return session.patients?.last_name || session.patients?.first_name || 'Paziente'
+}
+
+/** Initials of every word in a name: "Rossi-Bianchi" → "R.B." */
+const initialsOf = (name: string): string =>
+  name
+    .split(/[\s\-']+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + '.')
+    .join('')
+
+/**
+ * Session name for GOOGLE CALENDAR event titles, with configurable privacy.
+ * Patient names are clinical data landing on Google's servers — the
+ * censored formats keep them recognizable at a glance without exposing them.
+ *
+ * - 'full':          "Rossi Mario"     / "Rossi-Bianchi (Coppia)"
+ * - 'first_initial': "Mario R."        / "Coppia R.B."
+ * - 'initials':      "M.R."            / "Coppia R.B."
+ */
+export const calendarDisplayName = (
+  session: SessionLike,
+  format: CalendarTitleFormat
+): string => {
+  if (format === 'full') return sessionDisplayName(session)
+
+  if (session.group_id) {
+    const typeLabel = sessionTypeLabel(session.session_type) || 'Gruppo'
+    const groupName = session.patient_groups?.name
+    return groupName ? `${typeLabel} ${initialsOf(groupName)}` : typeLabel
+  }
+
+  const first = session.patients?.first_name ?? ''
+  const last = session.patients?.last_name ?? ''
+  if (!first && !last) return 'Seduta'
+
+  if (format === 'first_initial') {
+    const lastInitial = last ? ` ${last[0].toUpperCase()}.` : ''
+    return first ? `${first}${lastInitial}` : initialsOf(last)
+  }
+
+  // 'initials'
+  const fi = first ? first[0].toUpperCase() + '.' : ''
+  const li = last ? last[0].toUpperCase() + '.' : ''
+  return `${fi}${li}` || 'Seduta'
 }
 
 export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {

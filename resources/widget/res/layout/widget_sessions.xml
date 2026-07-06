@@ -12,27 +12,44 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="8dp">
+        android:paddingBottom="4dp">
 
+        <!-- Only the TITLE opens the app: the refresh icon lives in the same
+             row, and putting the click on the whole header made near-misses
+             on the tiny refresh icon open the app instead of refreshing. -->
         <TextView
+            android:id="@+id/widget_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
             android:text="@string/widget_today_sessions"
             android:textColor="#FFFFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium" />
 
+        <!-- 44dp touch target -->
         <ImageView
             android:id="@+id/widget_refresh"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:padding="4dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:padding="10dp"
             android:src="@drawable/widget_ic_refresh"
             android:contentDescription="@string/widget_refresh"
             android:background="?android:attr/selectableItemBackgroundBorderless" />
     </LinearLayout>
+
+    <!-- When the app last pushed data to the widget — doubles as a
+         diagnostic: if this never changes, the app isn't pushing. -->
+    <TextView
+        android:id="@+id/widget_updated_at"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="6dp"
+        android:textColor="#FF64748B"
+        android:textSize="10sp" />
 
     <ListView
         android:id="@+id/widget_sessions_list"

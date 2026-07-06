@@ -69,7 +69,7 @@ export const useGoogleCalendarSync = () => {
         session.service_type_id,
         session.id,
         session.group_id,
-        colorByService ? getGoogleColorId(session.service_type_id) : null
+        colorByService ? getGoogleColorId(session.service_type_id, session.service_types?.color) : null
       )
 
       try {

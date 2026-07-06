@@ -6,7 +6,7 @@ create extension if not exists "uuid-ossp";
 
 -- Create enum types
 create type public.service_type as enum ('private', 'package');
-create type public.payment_method as enum ('cash', 'bank_transfer', 'credit_card', 'other');
+create type public.payment_method as enum ('cash', 'bank_transfer', 'credit_card', 'other', 'my_invoice', 'center_invoice');
 
 -- Users table (extends auth.users from Supabase)
 create table if not exists public.users (
@@ -66,6 +66,12 @@ create table if not exists public.service_types (
   duration_minutes integer not null default 60 check (duration_minutes > 0),
   price numeric(10, 2) not null check (price >= 0),
   type public.service_type not null default 'private'::public.service_type,
+  -- Custom display color (hex); NULL = automatic hash-based color
+  color text,
+  -- Percentage of the price that belongs to the center (billing arrangements)
+  center_percentage numeric(5,2) not null default 0 check (center_percentage >= 0 and center_percentage <= 100),
+  -- Default method used to project net income for unpaid sessions
+  default_payment_method public.payment_method,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -483,4 +489,32 @@ create policy "Users manage own calendar settings"
 create index if not exists calendar_settings_user_id_idx on public.calendar_settings(user_id);
 
 create trigger calendar_settings_updated_at_trigger before update on public.calendar_settings
+  for each row execute function public.update_updated_at_column();
+
+-- ---------------------------------------------------------------------------
+-- Tax settings (regime forfettario) for net income estimates
+-- ---------------------------------------------------------------------------
+create table if not exists public.tax_settings (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.users(id) on delete cascade unique,
+  coefficiente_redditivita numeric(5,2) not null default 78
+    check (coefficiente_redditivita >= 0 and coefficiente_redditivita <= 100),
+  imposta_sostitutiva_pct numeric(5,2) not null default 5
+    check (imposta_sostitutiva_pct >= 0 and imposta_sostitutiva_pct <= 100),
+  enpap_pct numeric(5,2) not null default 10
+    check (enpap_pct >= 0 and enpap_pct <= 100),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.tax_settings enable row level security;
+
+create policy "Users manage own tax settings"
+  on public.tax_settings for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create index if not exists tax_settings_user_id_idx on public.tax_settings(user_id);
+
+create trigger tax_settings_updated_at_trigger before update on public.tax_settings
   for each row execute function public.update_updated_at_column();

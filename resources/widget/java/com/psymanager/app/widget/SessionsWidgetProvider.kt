@@ -85,6 +85,18 @@ class SessionsWidgetProvider : AppWidgetProvider() {
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_sessions)
 
+            // Show when the app last pushed data — makes "widget not
+            // updating" diagnosable at a glance.
+            val prefs = context.getSharedPreferences(WidgetStorage.PREFS_NAME, 0)
+            val updatedAt = prefs.getLong(WidgetStorage.KEY_UPDATED_AT, 0L)
+            val updatedText = if (updatedAt > 0L) {
+                val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                "Aggiornato alle " + fmt.format(java.util.Date(updatedAt))
+            } else {
+                "In attesa di dati — apri l'app"
+            }
+            views.setTextViewText(R.id.widget_updated_at, updatedText)
+
             // Bind the ListView to the RemoteViewsService
             val serviceIntent = Intent(context, SessionsWidgetService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -93,7 +105,9 @@ class SessionsWidgetProvider : AppWidgetProvider() {
             views.setRemoteAdapter(R.id.widget_sessions_list, serviceIntent)
             views.setEmptyView(R.id.widget_sessions_list, R.id.widget_sessions_empty)
 
-            // Header click → open the app on /sessions
+            // Title (NOT the whole header) → open the app on /sessions.
+            // The refresh icon shares the header row: a click PI on the whole
+            // header swallowed near-miss taps around the refresh icon.
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 data = Uri.parse("psymanager://sessions")
@@ -104,16 +118,17 @@ class SessionsWidgetProvider : AppWidgetProvider() {
                 openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_header, openAppPI)
+            views.setOnClickPendingIntent(R.id.widget_title, openAppPI)
             views.setOnClickPendingIntent(R.id.widget_sessions_empty, openAppPI)
 
-            // Refresh button → trigger redraw
+            // Refresh button → trigger redraw (re-reads stored data; fresh
+            // data still requires opening the app, which pushes on load)
             val refreshIntent = Intent(context, SessionsWidgetProvider::class.java).apply {
                 action = WidgetStorage.ACTION_REFRESH
             }
             val refreshPI = PendingIntent.getBroadcast(
                 context,
-                0,
+                2,
                 refreshIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )

@@ -56,6 +56,15 @@ export const clinicalNoteSchema = z.object({
 
 export type ClinicalNoteFormData = z.infer<typeof clinicalNoteSchema>
 
+export const paymentMethodEnum = z.enum([
+  'cash',
+  'bank_transfer',
+  'credit_card',
+  'other',
+  'my_invoice',
+  'center_invoice',
+])
+
 export const serviceTypeSchema = z.object({
   name: z.string().min(1, 'Il nome è obbligatorio').max(100),
   duration_minutes: z
@@ -67,7 +76,25 @@ export const serviceTypeSchema = z.object({
     .number({ message: 'Inserisci un prezzo valido' })
     .min(0, 'Il prezzo non può essere negativo'),
   type: z.enum(['private', 'package']),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'Colore non valido')
+    .optional()
+    .or(z.literal('')),
+  center_percentage: z
+    .number({ message: 'Inserisci una percentuale valida' })
+    .min(0, 'Minimo 0')
+    .max(100, 'Massimo 100'),
+  default_payment_method: paymentMethodEnum.optional().or(z.literal('')),
 })
+
+export const taxSettingsSchema = z.object({
+  coefficiente_redditivita: z.number().min(0).max(100),
+  imposta_sostitutiva_pct: z.number().min(0).max(100),
+  enpap_pct: z.number().min(0).max(100),
+})
+
+export type TaxSettingsFormData = z.infer<typeof taxSettingsSchema>
 
 export type ServiceTypeFormData = z.infer<typeof serviceTypeSchema>
 
@@ -166,7 +193,7 @@ export const paymentSchema = z.object({
     .number({ message: 'Inserisci un importo valido' })
     .min(0.01, 'L\'importo deve essere maggiore di 0'),
   payment_date: z.string().min(1, 'La data è obbligatoria'),
-  payment_method: z.enum(['cash', 'bank_transfer', 'credit_card', 'other']),
+  payment_method: paymentMethodEnum,
   notes: z.string().optional().or(z.literal('')),
 })
 

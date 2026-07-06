@@ -114,7 +114,7 @@ export default function WeeklyCalendarView({
               {/* Sessions */}
               <div className="space-y-1">
                 {daySessions.map((session) => {
-                  const color = getServiceColor(session.service_type_id)
+                  const color = getServiceColor(session.service_type_id, session.service_types?.color)
                   const endTime = addMinutes(
                     new Date(session.scheduled_at),
                     session.duration_minutes

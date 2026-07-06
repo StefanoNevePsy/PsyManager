@@ -69,7 +69,7 @@ export default function SessionsList({
             </h3>
             <div className="space-y-2">
               {daySessions.map((session) => {
-                const color = getServiceColor(session.service_type_id)
+                const color = getServiceColor(session.service_type_id, session.service_types?.color)
                 const inactive =
                   session.status === 'cancelled' || session.status === 'no_show'
                 return (

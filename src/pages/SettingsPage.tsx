@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Save, Calendar, Shield, User, AlertCircle, Check, Cloud, Bell } from 'lucide-react'
+import { Save, Calendar, Shield, User, AlertCircle, Check, Cloud, Bell, Percent } from 'lucide-react'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useAuth } from '@/hooks/useAuth'
 import { useUserProfile } from '@/hooks/useUserProfile'
@@ -8,6 +8,8 @@ import {
   useUpsertReminderSettings,
   DEFAULT_REMINDER_SETTINGS,
 } from '@/hooks/useReminderSettings'
+import { useTaxSettings, useUpdateTaxSettings } from '@/hooks/useTaxSettings'
+import { DEFAULT_TAX_SETTINGS, effectiveTaxRate } from '@/lib/netIncome'
 import { ensureNotificationPermission } from '@/lib/reminders'
 import { Button, Card, Input, Select, PageHeader, useToast } from '@/components/ui'
 
@@ -39,6 +41,14 @@ export default function SettingsPage() {
     post_session_minutes: DEFAULT_REMINDER_SETTINGS.post_session_minutes,
   })
 
+  const { data: taxSettings } = useTaxSettings()
+  const { mutateAsync: saveTaxSettings, isPending: isSavingTax } = useUpdateTaxSettings()
+  const [taxForm, setTaxForm] = useState({
+    coefficiente_redditivita: DEFAULT_TAX_SETTINGS.coefficiente_redditivita,
+    imposta_sostitutiva_pct: DEFAULT_TAX_SETTINGS.imposta_sostitutiva_pct,
+    enpap_pct: DEFAULT_TAX_SETTINGS.enpap_pct,
+  })
+
   useEffect(() => {
     if (reminderSettings) {
       setReminderForm({
@@ -49,6 +59,27 @@ export default function SettingsPage() {
       })
     }
   }, [reminderSettings])
+
+  useEffect(() => {
+    if (taxSettings) {
+      setTaxForm({
+        coefficiente_redditivita: taxSettings.coefficiente_redditivita,
+        imposta_sostitutiva_pct: taxSettings.imposta_sostitutiva_pct,
+        enpap_pct: taxSettings.enpap_pct,
+      })
+    }
+  }, [taxSettings])
+
+  const handleSaveTax = async () => {
+    try {
+      await saveTaxSettings(taxForm)
+      toast.success('Regime fiscale salvato')
+    } catch (error) {
+      toast.error('Errore nel salvataggio', {
+        description: error instanceof Error ? error.message : 'Riprova',
+      })
+    }
+  }
 
   const handleSaveReminders = async () => {
     try {
@@ -317,6 +348,86 @@ export default function SettingsPage() {
             >
               <Save className="w-4 h-4" strokeWidth={2} />
               Salva promemoria
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Tax regime / net income estimate */}
+      <Card>
+        <div className="flex items-center gap-2 mb-5">
+          <Percent className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+          <h2 className="font-display text-xl font-semibold tracking-tight">
+            Regime fiscale (stima del netto)
+          </h2>
+        </div>
+
+        <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
+          Questi parametri vengono usati per stimare il netto delle tue prestazioni
+          (dashboard e report), in base al regime forfettario.
+        </p>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Coefficiente di redditività %"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={taxForm.coefficiente_redditivita}
+              onChange={(e) =>
+                setTaxForm({
+                  ...taxForm,
+                  coefficiente_redditivita: Number(e.target.value),
+                })
+              }
+            />
+            <Input
+              label="Imposta sostitutiva %"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={taxForm.imposta_sostitutiva_pct}
+              onChange={(e) =>
+                setTaxForm({
+                  ...taxForm,
+                  imposta_sostitutiva_pct: Number(e.target.value),
+                })
+              }
+            />
+            <Input
+              label="ENPAP %"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={taxForm.enpap_pct}
+              onChange={(e) =>
+                setTaxForm({
+                  ...taxForm,
+                  enpap_pct: Number(e.target.value),
+                })
+              }
+            />
+          </div>
+
+          <p className="text-sm text-foreground">
+            Aliquota effettiva sul fatturato:{' '}
+            <span className="font-semibold tabular-nums">
+              {(effectiveTaxRate(taxForm) * 100).toFixed(1)}%
+            </span>
+          </p>
+
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Stima ai fini di pianificazione — non sostituisce il commercialista.
+          </p>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleSaveTax} loading={isSavingTax} disabled={isSavingTax}>
+              <Save className="w-4 h-4" strokeWidth={2} />
+              Salva regime fiscale
             </Button>
           </div>
         </div>

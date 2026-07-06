@@ -2,7 +2,13 @@ export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
 
 export type CalendarTitleFormat = 'full' | 'first_initial' | 'initials'
 
-export type PaymentMethod = 'cash' | 'bank_transfer' | 'credit_card' | 'other'
+export type PaymentMethod =
+  | 'cash'
+  | 'bank_transfer'
+  | 'credit_card'
+  | 'other'
+  | 'my_invoice'
+  | 'center_invoice'
 
 export interface Database {
   public: {
@@ -133,6 +139,9 @@ export interface Database {
           duration_minutes: number
           price: number
           type: 'private' | 'package'
+          color?: string | null
+          center_percentage: number
+          default_payment_method?: PaymentMethod | null
           created_at: string
           updated_at: string
         }
@@ -143,6 +152,9 @@ export interface Database {
           duration_minutes: number
           price: number
           type: 'private' | 'package'
+          color?: string | null
+          center_percentage?: number
+          default_payment_method?: PaymentMethod | null
           created_at?: string
           updated_at?: string
         }
@@ -151,6 +163,35 @@ export interface Database {
           duration_minutes?: number
           price?: number
           type?: 'private' | 'package'
+          color?: string | null
+          center_percentage?: number
+          default_payment_method?: PaymentMethod | null
+          updated_at?: string
+        }
+      }
+      tax_settings: {
+        Row: {
+          id: string
+          user_id: string
+          coefficiente_redditivita: number
+          imposta_sostitutiva_pct: number
+          enpap_pct: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          coefficiente_redditivita?: number
+          imposta_sostitutiva_pct?: number
+          enpap_pct?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          coefficiente_redditivita?: number
+          imposta_sostitutiva_pct?: number
+          enpap_pct?: number
           updated_at?: string
         }
       }

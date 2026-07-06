@@ -113,7 +113,7 @@ export default function CalendarView({
 
                 <div className="space-y-1">
                   {daySessions.slice(0, 3).map((session) => {
-                    const color = getServiceColor(session.service_type_id)
+                    const color = getServiceColor(session.service_type_id, session.service_types?.color)
                     const inactive =
                       session.status === 'cancelled' || session.status === 'no_show'
                     return (

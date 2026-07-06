@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
+import { startOfDay, endOfDay } from 'date-fns'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import {
-  listEvents,
+  listEventsIncremental,
   createEvent,
   updateEvent,
   deleteEvent,
@@ -12,12 +13,21 @@ import { useSessions, SessionWithRelations } from './useSessions'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './useAuth'
+import { sessionDisplayName } from '@/lib/sessionDisplay'
 
 // Sync window: ±N days from today. Limits the number of operations.
 const SYNC_DAYS_PAST = 90
 const SYNC_DAYS_FUTURE = 180
 const PARALLEL_BATCH_SIZE = 5
 const MAX_OPERATIONS = 500
+const LAST_SYNC_KEY = 'psymanager:gcal_last_sync'
+
+const readLastSync = (): number | null => {
+  const raw = localStorage.getItem(LAST_SYNC_KEY)
+  if (!raw) return null
+  const value = Number(raw)
+  return Number.isNaN(value) ? null : value
+}
 
 export const useGoogleCalendarSync = () => {
   const { isConnected } = useGoogleCalendarStore()
@@ -27,31 +37,33 @@ export const useGoogleCalendarSync = () => {
   // Limit the sessions we operate on to a sane window —
   // an infinite recurrence could otherwise generate thousands of sessions
   // and the loop below would never finish.
-  const syncStart = new Date()
-  syncStart.setDate(syncStart.getDate() - SYNC_DAYS_PAST)
-  const syncEnd = new Date()
-  syncEnd.setDate(syncEnd.getDate() + SYNC_DAYS_FUTURE)
+  // Day-bounded so the React Query key stays stable across renders.
+  const now = new Date()
+  const syncStart = startOfDay(new Date(now.getTime() - SYNC_DAYS_PAST * 24 * 60 * 60 * 1000))
+  const syncEnd = endOfDay(new Date(now.getTime() + SYNC_DAYS_FUTURE * 24 * 60 * 60 * 1000))
 
   const { data: sessions = [] } = useSessions(syncStart, syncEnd)
   const [syncing, setSyncing] = useState(false)
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [unmappedEvents, setUnmappedEvents] = useState<GoogleCalendarEvent[]>([])
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(() => readLastSync())
 
   const pushSessionToCalendar = useCallback(
     async (session: SessionWithRelations) => {
       if (!isConnected()) return null
 
-      const patientName = `${session.patients.last_name} ${session.patients.first_name}`
+      // Group-aware, null-safe title (group sessions have patients === null)
       const event = sessionToGoogleEvent(
-        patientName,
+        sessionDisplayName(session),
         session.service_types.name,
         session.scheduled_at,
         session.duration_minutes,
         session.notes,
         session.patient_id,
         session.service_type_id,
-        session.id
+        session.id,
+        session.group_id
       )
 
       try {
@@ -118,8 +130,13 @@ export const useGoogleCalendarSync = () => {
       setSyncProgress({ current: 0, total: 0 })
 
       try {
-        // Use the same window for Google events
-        const events = await listEvents('primary', syncStart, syncEnd)
+        // Incremental when we have a sync token from a previous run; a full
+        // paginated window fetch otherwise (or after a 410 forces a reset).
+        const { events, isFullSync } = await listEventsIncremental(
+          'primary',
+          syncStart,
+          syncEnd
+        )
 
         const sessionMap = new Map(
           sessions
@@ -129,16 +146,28 @@ export const useGoogleCalendarSync = () => {
 
         const unmapped: GoogleCalendarEvent[] = []
         const sessionsToUpdate: Array<{ id: string; scheduled_at: string; duration_minutes: number }> = []
+        // Sessions whose linked Google event was explicitly reported
+        // cancelled/deleted in this batch — app is source of truth, so we
+        // clear the link and re-push them below.
+        const cancelledEventSessionIds = new Set<string>()
 
         for (const event of events) {
           if (!event.id) continue
 
           const existingSession = sessionMap.get(event.id)
+
+          if (event.status === 'cancelled') {
+            if (existingSession) {
+              cancelledEventSessionIds.add(existingSession.id)
+            }
+            continue
+          }
+
           const meta = event.extendedProperties?.private
 
-          if (existingSession && event.start.dateTime) {
+          if (existingSession && event.start?.dateTime) {
             const newScheduledAt = new Date(event.start.dateTime).toISOString()
-            const newEnd = event.end.dateTime ? new Date(event.end.dateTime) : null
+            const newEnd = event.end?.dateTime ? new Date(event.end.dateTime) : null
             const newDuration = newEnd
               ? Math.round(
                   (newEnd.getTime() - new Date(event.start.dateTime).getTime()) /
@@ -159,7 +188,7 @@ export const useGoogleCalendarSync = () => {
           } else if (meta?.appId === 'psymanager' && meta.sessionId) {
             // Already known — skip
             continue
-          } else if (event.start.dateTime) {
+          } else if (event.start?.dateTime) {
             unmapped.push(event)
           }
         }
@@ -177,8 +206,74 @@ export const useGoogleCalendarSync = () => {
           })
         }
 
-        // Find sessions that need to be pushed (no google_calendar_event_id yet)
-        const sessionsToPush = sessions.filter((s) => !s.google_calendar_event_id)
+        // Sessions whose google_calendar_event_id needs clearing (so the
+        // push step below re-creates the event). Populated differently
+        // depending on sync mode:
+        let clearedIds = new Set<string>()
+
+        if (isFullSync) {
+          // Full window fetched — absence from the list means the event was
+          // truly deleted on Google (dangling reference), not just unchanged.
+          // This detection only makes sense against a complete window; an
+          // incremental delta only contains what changed, so a missing id
+          // there says nothing about whether the event still exists.
+          const fetchedEventIds = new Set(events.map((e) => e.id).filter(Boolean))
+          const danglingSessions = sessions.filter(
+            (s) =>
+              s.google_calendar_event_id &&
+              !fetchedEventIds.has(s.google_calendar_event_id) &&
+              new Date(s.scheduled_at) >= syncStart &&
+              new Date(s.scheduled_at) <= syncEnd
+          )
+          if (danglingSessions.length > 0) {
+            await runInBatches(danglingSessions, async (s) => {
+              await supabase
+                .from('sessions')
+                .update({ google_calendar_event_id: null })
+                .eq('id', s.id)
+            })
+          }
+          clearedIds = new Set(danglingSessions.map((s) => s.id))
+        } else if (cancelledEventSessionIds.size > 0) {
+          // Incremental — only clear ids for events explicitly reported as
+          // cancelled in this delta.
+          await runInBatches(Array.from(cancelledEventSessionIds), async (id) => {
+            await supabase
+              .from('sessions')
+              .update({ google_calendar_event_id: null })
+              .eq('id', id)
+          })
+          clearedIds = cancelledEventSessionIds
+        }
+
+        // Cancelled local sessions must never be pushed. If one still has a
+        // linked event (and wasn't already cleared above), remove the
+        // Google event and drop the link instead of re-creating it.
+        const cancelledWithEvent = sessions.filter(
+          (s) =>
+            s.status === 'cancelled' &&
+            s.google_calendar_event_id &&
+            !clearedIds.has(s.id)
+        )
+        if (cancelledWithEvent.length > 0) {
+          await runInBatches(cancelledWithEvent, async (s) => {
+            await removeSessionFromCalendar(s.google_calendar_event_id!)
+            await supabase
+              .from('sessions')
+              .update({ google_calendar_event_id: null })
+              .eq('id', s.id)
+          })
+        }
+
+        // Find sessions that need to be pushed: no google_calendar_event_id
+        // yet, or whose Google event was just cleared above — excluding
+        // cancelled sessions, which are never pushed.
+        const sessionsToPush = sessions
+          .filter((s) => s.status !== 'cancelled')
+          .filter((s) => !s.google_calendar_event_id || clearedIds.has(s.id))
+          .map((s) =>
+            clearedIds.has(s.id) ? { ...s, google_calendar_event_id: undefined } : s
+          )
 
         if (sessionsToPush.length > MAX_OPERATIONS) {
           throw new Error(
@@ -196,6 +291,9 @@ export const useGoogleCalendarSync = () => {
 
         setUnmappedEvents(unmapped)
         queryClient.invalidateQueries({ queryKey: ['sessions'] })
+
+        localStorage.setItem(LAST_SYNC_KEY, String(Date.now()))
+        setLastSyncAt(readLastSync())
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Sync failed')
       } finally {
@@ -203,7 +301,7 @@ export const useGoogleCalendarSync = () => {
         setSyncProgress(null)
       }
     },
-    [isConnected, user, sessions, pushSessionToCalendar, queryClient, syncStart, syncEnd]
+    [isConnected, user, sessions, pushSessionToCalendar, removeSessionFromCalendar, queryClient, syncStart, syncEnd]
   )
 
   return {
@@ -211,6 +309,7 @@ export const useGoogleCalendarSync = () => {
     syncProgress,
     error,
     unmappedEvents,
+    lastSyncAt,
     pushSessionToCalendar,
     removeSessionFromCalendar,
     fullSync,

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Repeat, ChevronDown, Info, DollarSign, NotebookPen, Users } from 'lucide-react'
+import { startOfDay, endOfDay, format } from 'date-fns'
+import { Repeat, ChevronDown, Info, DollarSign, NotebookPen, Users, AlertTriangle } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
 import { usePatientGroups } from '@/hooks/usePatientGroups'
 import { useServiceTypes } from '@/hooks/useServiceTypes'
+import { useSessions } from '@/hooks/useSessions'
 import { describeRecurrence, generateOccurrences } from '@/lib/recurrence'
-import { Database } from '@/types/database'
+import { sessionDisplayName, SESSION_STATUS_LABELS } from '@/lib/sessionDisplay'
+import { Database, SessionStatus } from '@/types/database'
 
 type Session = Database['public']['Tables']['sessions']['Row']
 
@@ -76,6 +79,7 @@ export default function SessionForm({
       patient_id: initialData?.patient_id || '',
       group_id: initialData?.group_id || '',
       session_type: initialData?.session_type || 'individuale',
+      status: initialData?.status || 'scheduled',
       service_type_id: initialData?.service_type_id || '',
       scheduled_at: initialDateValue,
       duration_minutes: initialData?.duration_minutes || 60,
@@ -105,6 +109,29 @@ export default function SessionForm({
   const serviceTypeId = useWatch({ control, name: 'service_type_id' })
   const recurrence = useWatch({ control, name: 'recurrence' })
   const scheduledAt = useWatch({ control, name: 'scheduled_at' })
+  const durationMinutes = useWatch({ control, name: 'duration_minutes' })
+
+  // Overlap detection: fetch the sessions of the chosen day and warn when the
+  // selected slot collides with another (non-cancelled) session.
+  const scheduledDate = scheduledAt ? new Date(scheduledAt) : null
+  const hasValidDate = !!scheduledDate && !isNaN(scheduledDate.getTime())
+  const conflictDay = hasValidDate ? scheduledDate : new Date()
+  const { data: daySessions = [] } = useSessions(
+    startOfDay(conflictDay),
+    endOfDay(conflictDay)
+  )
+  const conflicts = (() => {
+    if (!hasValidDate) return []
+    const newStart = scheduledDate.getTime()
+    const newEnd = newStart + (durationMinutes || 60) * 60_000
+    return daySessions.filter((s) => {
+      if (s.id === initialData?.id) return false
+      if (s.status === 'cancelled') return false
+      const start = new Date(s.scheduled_at).getTime()
+      const end = start + s.duration_minutes * 60_000
+      return start < newEnd && end > newStart
+    })
+  })()
 
   useEffect(() => {
     if (serviceTypeId && !initialData) {
@@ -175,6 +202,9 @@ export default function SessionForm({
             onClick={() => {
               setSelectedType('group')
               setValue('patient_id', '')
+              // The group select only offers coppia/familiare — make sure the
+              // tracked value can never stay 'individuale' for a group session
+              setValue('session_type', 'coppia')
             }}
             className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               selectedType === 'group'
@@ -266,6 +296,39 @@ export default function SessionForm({
         />
       </div>
 
+      {/* Overlap warning — non-blocking */}
+      {conflicts.length > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-md border border-orange-500/30 bg-orange-500/10 text-sm">
+          <AlertTriangle className="w-4 h-4 mt-0.5 text-orange-600 flex-shrink-0" strokeWidth={2} />
+          <div>
+            <p className="font-medium text-orange-600">
+              Sovrapposizione con {conflicts.length === 1 ? 'un’altra seduta' : `${conflicts.length} sedute`}
+            </p>
+            <ul className="text-xs text-orange-600/80 mt-1 space-y-0.5">
+              {conflicts.slice(0, 3).map((c) => (
+                <li key={c.id}>
+                  {format(new Date(c.scheduled_at), 'HH:mm')} — {sessionDisplayName(c)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Status: only meaningful when editing an existing session */}
+      {isEditing && (
+        <Select
+          id="status"
+          label="Stato seduta"
+          {...register('status')}
+          options={(Object.keys(SESSION_STATUS_LABELS) as SessionStatus[]).map((s) => ({
+            value: s,
+            label: SESSION_STATUS_LABELS[s],
+          }))}
+          hint="Le sedute annullate o con assenza non vengono conteggiate nei saldi"
+        />
+      )}
+
       <Textarea
         id="notes"
         label="Note"
@@ -281,16 +344,15 @@ export default function SessionForm({
           <div>
             <p className="font-medium text-foreground">Parte di una serie ricorrente</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Le modifiche qui valgono solo per questa occorrenza. Per cambiare la
-              ricorrenza, elimina le occorrenze future dal pulsante elimina e ricreale.
+              Al salvataggio potrai scegliere se applicare le modifiche solo a
+              questa seduta o anche a tutte le successive della serie.
             </p>
           </div>
         </div>
       )}
 
       {/* Recurrence section: shown for new sessions and for existing non-recurring sessions */}
-      {/* Only available for individual sessions */}
-      {showRecurrenceSection && selectedType === 'patient' && (
+      {showRecurrenceSection && (
         <div className="border-t border-border pt-4">
           <button
             type="button"

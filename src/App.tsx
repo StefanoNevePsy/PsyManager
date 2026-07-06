@@ -7,6 +7,8 @@ import { useGoogleCalendarLifecycle } from '@/hooks/useGoogleCalendarLifecycle'
 import { useDeepLinks } from '@/hooks/useDeepLinks'
 import { useSessionsWidget } from '@/hooks/useSessionsWidget'
 import { useRemindersSync } from '@/hooks/useRemindersSync'
+import { useSeriesMaintenance } from '@/hooks/useSeriesMaintenance'
+import { useAutoCalendarSync } from '@/hooks/useAutoCalendarSync'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
@@ -64,6 +66,8 @@ function AppRoutes() {
   useDeepLinks()
   useSessionsWidget()
   useRemindersSync()
+  useSeriesMaintenance()
+  useAutoCalendarSync()
 
   return (
     <Routes>

@@ -8,7 +8,9 @@ import {
   endOfYear,
   startOfDay,
   addDays,
+  format,
 } from 'date-fns'
+import { patientFullName, sessionDisplayName, isBillableStatus } from '@/lib/sessionDisplay'
 
 export interface PatientBalanceLite {
   patientId: string
@@ -51,6 +53,8 @@ export interface DashboardStats {
   outstandingBalances: PatientBalanceLite[]
 }
 
+const SESSION_WITH_RELATIONS_SELECT = '*, patients(*), service_types(*), patient_groups(*)'
+
 export const useDashboardStats = () => {
   const { user } = useAuth()
 
@@ -71,6 +75,7 @@ export const useDashboardStats = () => {
       }
 
       const now = new Date()
+      const nowMs = now.getTime()
       const monthStart = startOfMonth(now)
       const monthEnd = endOfMonth(now)
       const yearStart = startOfYear(now)
@@ -80,10 +85,10 @@ export const useDashboardStats = () => {
 
       const [
         { data: patients },
-        { data: monthSessions },
+        { data: groups },
+        { data: monthSessionsData },
         { data: monthPayments },
         { data: yearPayments },
-        { data: yearScheduledSessions },
         { data: todayData },
         { data: upcomingData },
         { data: recentPaymentsData },
@@ -91,9 +96,10 @@ export const useDashboardStats = () => {
         { data: allPayments },
       ] = await Promise.all([
         supabase.from('patients').select('id, first_name, last_name').eq('user_id', user.id),
+        supabase.from('patient_groups').select('id, name').eq('user_id', user.id),
         supabase
           .from('sessions')
-          .select('id')
+          .select('id, status')
           .eq('user_id', user.id)
           .gte('scheduled_at', monthStart.toISOString())
           .lte('scheduled_at', monthEnd.toISOString()),
@@ -101,30 +107,24 @@ export const useDashboardStats = () => {
           .from('payments')
           .select('amount')
           .eq('user_id', user.id)
-          .gte('payment_date', monthStart.toISOString().split('T')[0])
-          .lte('payment_date', monthEnd.toISOString().split('T')[0]),
+          .gte('payment_date', format(monthStart, 'yyyy-MM-dd'))
+          .lte('payment_date', format(monthEnd, 'yyyy-MM-dd')),
         supabase
           .from('payments')
           .select('amount')
           .eq('user_id', user.id)
-          .gte('payment_date', yearStart.toISOString().split('T')[0])
-          .lte('payment_date', yearEnd.toISOString().split('T')[0]),
+          .gte('payment_date', format(yearStart, 'yyyy-MM-dd'))
+          .lte('payment_date', format(yearEnd, 'yyyy-MM-dd')),
         supabase
           .from('sessions')
-          .select('*, service_types(price, type)')
-          .eq('user_id', user.id)
-          .gte('scheduled_at', yearStart.toISOString())
-          .lte('scheduled_at', yearEnd.toISOString()),
-        supabase
-          .from('sessions')
-          .select('*, patients(*), service_types(*)')
+          .select(SESSION_WITH_RELATIONS_SELECT)
           .eq('user_id', user.id)
           .gte('scheduled_at', today.toISOString())
           .lt('scheduled_at', addDays(today, 1).toISOString())
           .order('scheduled_at'),
         supabase
           .from('sessions')
-          .select('*, patients(*), service_types(*)')
+          .select(SESSION_WITH_RELATIONS_SELECT)
           .eq('user_id', user.id)
           .gte('scheduled_at', addDays(today, 1).toISOString())
           .lte('scheduled_at', nextWeek.toISOString())
@@ -132,22 +132,26 @@ export const useDashboardStats = () => {
           .limit(5),
         supabase
           .from('payments')
-          .select('*, patients(*)')
+          .select('*, patients(*), patient_groups(*)')
           .eq('user_id', user.id)
           .order('payment_date', { ascending: false })
           .limit(5),
         // For balance calculation: all past sessions (private only contribute to "due")
         supabase
           .from('sessions')
-          .select('patient_id, service_types(price, type)')
+          .select('patient_id, group_id, status, service_types(price, type)')
           .eq('user_id', user.id)
           .lte('scheduled_at', now.toISOString()),
         // For balance calculation: all payments
         supabase
           .from('payments')
-          .select('patient_id, amount')
+          .select('patient_id, group_id, amount')
           .eq('user_id', user.id),
       ])
+
+      const monthSessions = (monthSessionsData || []).filter((s: any) =>
+        isBillableStatus(s.status)
+      )
 
       const monthIncome =
         monthPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
@@ -155,55 +159,55 @@ export const useDashboardStats = () => {
       const yearIncome =
         yearPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
 
-      const projectedFromSessions =
-        yearScheduledSessions
-          ?.filter((s: any) => s.service_types?.type === 'private')
-          .reduce(
-            (sum: number, s: any) =>
-              sum + Number(s.service_types?.price || 0),
-            0
-          ) || 0
+      // Honest run-rate projection: YTD income / months elapsed * 12
+      const monthsElapsed = now.getMonth() + 1
+      const yearProjection = Math.round((yearIncome / monthsElapsed) * 12 * 100) / 100
 
-      const yearProjection = Math.max(yearIncome, projectedFromSessions)
-
-      // Build per-patient balance map
+      // Build per-entity (patient or group) balance map
       // Only count sessions that are truly completed: scheduled_at + duration_minutes < now
       const balanceMap = new Map<string, { totalDue: number; totalPaid: number }>()
       ;(allPastSessions || []).forEach((s: any) => {
         if (s.service_types?.type !== 'private') return
+        if (!isBillableStatus(s.status)) return
+        const entityId = s.patient_id ?? s.group_id
+        if (!entityId) return
         const sessionStart = new Date(s.scheduled_at).getTime()
         const sessionEnd = sessionStart + (s.duration_minutes * 60 * 1000)
         // Only count if the session has ENDED
         if (sessionEnd > nowMs) return
         const price = Number(s.service_types?.price || 0)
-        if (!balanceMap.has(s.patient_id)) {
-          balanceMap.set(s.patient_id, { totalDue: 0, totalPaid: 0 })
+        if (!balanceMap.has(entityId)) {
+          balanceMap.set(entityId, { totalDue: 0, totalPaid: 0 })
         }
-        balanceMap.get(s.patient_id)!.totalDue += price
+        balanceMap.get(entityId)!.totalDue += price
       })
       ;(allPayments || []).forEach((p: any) => {
-        if (!p.patient_id) return
-        if (!balanceMap.has(p.patient_id)) {
-          balanceMap.set(p.patient_id, { totalDue: 0, totalPaid: 0 })
+        const entityId = p.patient_id ?? p.group_id
+        if (!entityId) return
+        if (!balanceMap.has(entityId)) {
+          balanceMap.set(entityId, { totalDue: 0, totalPaid: 0 })
         }
-        balanceMap.get(p.patient_id)!.totalPaid += Number(p.amount)
+        balanceMap.get(entityId)!.totalPaid += Number(p.amount)
       })
 
-      const patientNameMap = new Map<string, string>()
+      const nameMap = new Map<string, string>()
       ;(patients || []).forEach((p: any) => {
-        patientNameMap.set(p.id, `${p.last_name} ${p.first_name}`)
+        nameMap.set(p.id, patientFullName(p))
+      })
+      ;(groups || []).forEach((g: any) => {
+        if (!nameMap.has(g.id)) nameMap.set(g.id, g.name)
       })
 
-      const getBalance = (patientId: string): number => {
-        const entry = balanceMap.get(patientId)
+      const getBalance = (entityId: string): number => {
+        const entry = balanceMap.get(entityId)
         if (!entry) return 0
         return entry.totalDue - entry.totalPaid
       }
 
       const outstandingBalances: PatientBalanceLite[] = Array.from(balanceMap.entries())
-        .map(([patientId, b]) => ({
-          patientId,
-          patientName: patientNameMap.get(patientId) || 'Sconosciuto',
+        .map(([entityId, b]) => ({
+          patientId: entityId,
+          patientName: nameMap.get(entityId) || 'Sconosciuto',
           balance: b.totalDue - b.totalPaid,
           totalDue: b.totalDue,
           totalPaid: b.totalPaid,
@@ -211,21 +215,18 @@ export const useDashboardStats = () => {
         .filter((b) => Math.abs(b.balance) >= 0.01)
         .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
 
-      const nowMs = now.getTime()
-
       const mapTodaySession = (s: any) => {
         const scheduledMs = new Date(s.scheduled_at).getTime()
+        const entityId = s.patient_id ?? s.group_id ?? ''
         return {
           id: s.id,
           scheduled_at: s.scheduled_at,
           duration_minutes: s.duration_minutes,
-          patientId: s.patient_id,
-          patientName: s.patients
-            ? `${s.patients.last_name} ${s.patients.first_name}`
-            : 'Sconosciuto',
+          patientId: entityId,
+          patientName: sessionDisplayName(s),
           serviceName: s.service_types?.name || '-',
           isPast: scheduledMs < nowMs,
-          patientBalance: getBalance(s.patient_id),
+          patientBalance: getBalance(entityId),
         }
       }
 
@@ -245,17 +246,18 @@ export const useDashboardStats = () => {
         )
       const orderedToday = [...futureToday, ...pastToday]
 
-      const mapUpcomingSession = (s: any) => ({
-        id: s.id,
-        scheduled_at: s.scheduled_at,
-        duration_minutes: s.duration_minutes,
-        patientId: s.patient_id,
-        patientName: s.patients
-          ? `${s.patients.last_name} ${s.patients.first_name}`
-          : 'Sconosciuto',
-        serviceName: s.service_types?.name || '-',
-        patientBalance: getBalance(s.patient_id),
-      })
+      const mapUpcomingSession = (s: any) => {
+        const entityId = s.patient_id ?? s.group_id ?? ''
+        return {
+          id: s.id,
+          scheduled_at: s.scheduled_at,
+          duration_minutes: s.duration_minutes,
+          patientId: entityId,
+          patientName: sessionDisplayName(s),
+          serviceName: s.service_types?.name || '-',
+          patientBalance: getBalance(entityId),
+        }
+      }
 
       return {
         activePatients: patients?.length || 0,
@@ -268,9 +270,11 @@ export const useDashboardStats = () => {
           id: p.id,
           amount: Number(p.amount),
           payment_date: p.payment_date,
-          patientName: p.patients
-            ? `${p.patients.last_name} ${p.patients.first_name}`
-            : undefined,
+          patientName: p.group_id
+            ? p.patient_groups?.name || 'Gruppo'
+            : p.patients
+              ? patientFullName(p.patients)
+              : undefined,
         })),
         outstandingBalances,
       }

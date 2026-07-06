@@ -206,13 +206,13 @@ export default function PatientsPage() {
         await updateMutation.mutateAsync({ id: editingPatient.id, updates: cleanData })
         patientId = editingPatient.id
         toast.success('Paziente aggiornato', {
-          description: `${cleanData.first_name} ${cleanData.last_name}`,
+          description: `${cleanData.first_name} ${cleanData.last_name ?? ''}`.trim(),
         })
       } else {
         const created = await createMutation.mutateAsync(cleanData)
         patientId = created.id
         toast.success('Paziente aggiunto', {
-          description: `${cleanData.first_name} ${cleanData.last_name} è ora in carico`,
+          description: `${`${cleanData.first_name} ${cleanData.last_name ?? ''}`.trim()} è ora in carico`,
         })
       }
 
@@ -244,7 +244,7 @@ export default function PatientsPage() {
 
   const handleDelete = async () => {
     if (!deletingPatient) return
-    const fullName = `${deletingPatient.first_name} ${deletingPatient.last_name}`
+    const fullName = `${deletingPatient.first_name} ${deletingPatient.last_name ?? ''}`.trim()
     try {
       await deleteMutation.mutateAsync(deletingPatient.id)
       setDeletingPatient(null)

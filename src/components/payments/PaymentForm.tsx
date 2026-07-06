@@ -3,6 +3,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { paymentSchema, PaymentFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
+import { patientFullName } from '@/lib/sessionDisplay'
 import { usePatients } from '@/hooks/usePatients'
 import { useServiceTypes } from '@/hooks/useServiceTypes'
 import { Database } from '@/types/database'
@@ -69,7 +70,7 @@ export default function PaymentForm({
           { value: '', label: 'Seleziona un paziente (opzionale)...' },
           ...patients.map((p) => ({
             value: p.id,
-            label: `${p.last_name} ${p.first_name}`,
+            label: patientFullName(p),
           })),
         ]}
       />

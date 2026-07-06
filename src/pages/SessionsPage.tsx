@@ -11,11 +11,13 @@ import {
   useSessions,
   useCreateSession,
   useUpdateSession,
+  useUpdateSessionScoped,
   useDeleteSession,
   useDeleteSessionScoped,
   useConvertSessionToSeries,
   SessionWithRelations,
   DeleteScope,
+  UpdateScope,
 } from '@/hooks/useSessions'
 import {
   Button,
@@ -38,6 +40,7 @@ import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useCreatePayment, usePatientBalanceMap } from '@/hooks/usePayments'
 import { useCreateClinicalNote } from '@/hooks/useClinicalNotes'
+import { sessionDisplayName, isBillableStatus } from '@/lib/sessionDisplay'
 
 type View = 'calendar' | 'list' | 'weekly'
 
@@ -54,6 +57,8 @@ export default function SessionsPage() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [diarySession, setDiarySession] = useState<SessionWithRelations | null>(null)
   const [pendingEditId, setPendingEditId] = useState<string | null>(null)
+  // Edits to a recurring session wait here while the user picks the scope
+  const [pendingScopedData, setPendingScopedData] = useState<SessionFormData | null>(null)
 
   const [pendingOpenPayment, setPendingOpenPayment] = useState(false)
 
@@ -103,11 +108,8 @@ export default function SessionsPage() {
     const session = sessions.find((s) => s.id === pendingEditId)
     if (session) {
       if (pendingOpenPayment && session.service_types?.type === 'private') {
-        const sessionPrice = Number(session.service_types?.price || 0)
-        const previousBalance = balanceMap.get(session.patient_id) || 0
-        const suggested = Math.max(0, sessionPrice + previousBalance)
         setPayingSession(session)
-        setPaymentAmount(suggested.toFixed(2))
+        setPaymentAmount(computeSuggestedAmount(session).toFixed(2))
       } else {
         setEditing(session)
         setModalOpen(true)
@@ -120,6 +122,7 @@ export default function SessionsPage() {
 
   const createMutation = useCreateSession()
   const updateMutation = useUpdateSession()
+  const updateScopedMutation = useUpdateSessionScoped()
   const deleteMutation = useDeleteSession()
   const deleteScopedMutation = useDeleteSessionScoped()
   const convertToSeriesMutation = useConvertSessionToSeries()
@@ -128,13 +131,27 @@ export default function SessionsPage() {
   const createNoteMutation = useCreateClinicalNote()
   const balanceMap = usePatientBalanceMap()
 
-  // Compute the suggested amount for a quick payment: session price + previous debit
-  // (or session price - previous credit). The previous balance is the patient's
-  // balance BEFORE this session is paid.
+  // Balance BEFORE this session: the balance map already includes this
+  // session's due once it has ended (and is billable), so subtract it back
+  // out to avoid suggesting a doubled amount.
+  const computePreviousBalance = (session: SessionWithRelations): number => {
+    const entityId = session.patient_id ?? session.group_id ?? ''
+    const balance = balanceMap.get(entityId) || 0
+    const sessionPrice = Number(session.service_types?.price || 0)
+    const sessionEnd =
+      new Date(session.scheduled_at).getTime() + session.duration_minutes * 60_000
+    const includedInBalance =
+      sessionEnd <= Date.now() &&
+      isBillableStatus(session.status) &&
+      session.service_types?.type === 'private'
+    return includedInBalance ? balance - sessionPrice : balance
+  }
+
+  // Suggested quick-payment amount: session price + previous debit
+  // (or session price − previous credit).
   const computeSuggestedAmount = (session: SessionWithRelations): number => {
     const sessionPrice = Number(session.service_types?.price || 0)
-    const previousBalance = balanceMap.get(session.patient_id) || 0
-    return Math.max(0, sessionPrice + previousBalance)
+    return Math.max(0, sessionPrice + computePreviousBalance(session))
   }
 
   const { isConnected } = useGoogleCalendarStore()
@@ -142,8 +159,15 @@ export default function SessionsPage() {
     useGoogleCalendarSync()
 
   const openCreateModal = (date?: Date) => {
+    // Clicking a day in the month view yields local midnight — default to a
+    // sensible working hour instead of 00:00
+    let d = date
+    if (d && d.getHours() === 0 && d.getMinutes() === 0) {
+      d = new Date(d)
+      d.setHours(9, 0, 0, 0)
+    }
     setEditing(null)
-    setDefaultDate(date)
+    setDefaultDate(d)
     setModalOpen(true)
   }
 
@@ -155,14 +179,18 @@ export default function SessionsPage() {
 
   const handleSubmit = async (data: SessionFormData) => {
     try {
+      // Explicit nulls: `undefined` keys are dropped by JSON serialization,
+      // which would leave a stale patient_id/group_id on the row when the
+      // user switches an existing session between individual and group.
       const cleanData = {
-        patient_id: data.patient_id || undefined,
-        group_id: data.group_id || undefined,
+        patient_id: data.patient_id || null,
+        group_id: data.group_id || null,
         session_type: data.session_type,
+        status: data.status || 'scheduled',
         service_type_id: data.service_type_id,
         scheduled_at: data.scheduled_at,
         duration_minutes: data.duration_minutes,
-        notes: data.notes || undefined,
+        notes: data.notes || null,
         recurrence: data.recurrence,
       }
 
@@ -175,7 +203,9 @@ export default function SessionsPage() {
         if (isConvertingToSeries && data.recurrence) {
           const result = await convertToSeriesMutation.mutateAsync({
             sessionId: editing.id,
-            patientId: cleanData.patient_id || '',
+            patientId: cleanData.patient_id,
+            groupId: cleanData.group_id,
+            sessionType: cleanData.session_type,
             serviceTypeId: cleanData.service_type_id,
             scheduledAt: cleanData.scheduled_at,
             durationMinutes: cleanData.duration_minutes,
@@ -185,6 +215,11 @@ export default function SessionsPage() {
           toast.success(`${result.occurrencesCount} sedute pianificate`, {
             description: 'La seduta originale è ora la prima della serie',
           })
+        } else if (editing.series_id) {
+          // Recurring session: let the user choose the scope (this occurrence
+          // only, or this and all the following ones) before saving.
+          setPendingScopedData(data)
+          return
         } else {
           const savedSession = await updateMutation.mutateAsync({
             id: editing.id,
@@ -192,6 +227,7 @@ export default function SessionsPage() {
               patient_id: cleanData.patient_id,
               group_id: cleanData.group_id,
               session_type: cleanData.session_type,
+              status: cleanData.status,
               service_type_id: cleanData.service_type_id,
               scheduled_at: cleanData.scheduled_at,
               duration_minutes: cleanData.duration_minutes,
@@ -243,6 +279,62 @@ export default function SessionsPage() {
     }
   }
 
+  // Apply a pending edit to a recurring session with the chosen scope
+  const applyScopedUpdate = async (scope: UpdateScope) => {
+    if (!editing || !pendingScopedData) return
+    const data = pendingScopedData
+    try {
+      const result = await updateScopedMutation.mutateAsync({
+        sessionId: editing.id,
+        seriesId: editing.series_id,
+        originalScheduledAt: editing.scheduled_at,
+        scope,
+        updates: {
+          patient_id: data.patient_id || null,
+          group_id: data.group_id || null,
+          session_type: data.session_type,
+          status: data.status || 'scheduled',
+          service_type_id: data.service_type_id,
+          scheduled_at: data.scheduled_at,
+          duration_minutes: data.duration_minutes,
+          notes: data.notes || null,
+        },
+      })
+
+      toast.success(
+        scope === 'one'
+          ? 'Seduta aggiornata'
+          : `${result.updatedSessions.length} sedute aggiornate`
+      )
+
+      // Best-effort push of every touched occurrence to Google Calendar
+      if (isConnected()) {
+        const toPush = result.updatedSessions
+          .filter((s) => s.status !== 'cancelled')
+          .slice(0, 30)
+        let pushed = 0
+        for (const s of toPush) {
+          try {
+            await pushSessionToCalendar(s)
+            pushed++
+          } catch {
+            // non-fatal — the next auto-sync will retry
+          }
+        }
+        if (pushed > 0) toast.info('Sincronizzate su Google Calendar')
+      }
+
+      setPendingScopedData(null)
+      setModalOpen(false)
+      setEditing(null)
+      setDefaultDate(undefined)
+    } catch (error) {
+      toast.error('Salvataggio fallito', {
+        description: error instanceof Error ? error.message : 'Riprova tra qualche istante',
+      })
+    }
+  }
+
   const openDeleteDialog = (session: SessionWithRelations) => {
     setDeleting(session)
     setDeleteScope('one')
@@ -254,6 +346,8 @@ export default function SessionsPage() {
       const calendarEventId = deleting.google_calendar_event_id
       const isRecurring = !!deleting.series_id
 
+      let eventIdsToRemove: string[] = calendarEventId ? [calendarEventId] : []
+
       if (isRecurring && deleteScope !== 'one') {
         const result = await deleteScopedMutation.mutateAsync({
           sessionId: deleting.id,
@@ -262,16 +356,21 @@ export default function SessionsPage() {
           scope: deleteScope,
         })
         toast.success(`${result.deletedCount} sedute eliminate`)
+        // Remove the Calendar events of EVERY deleted occurrence, not just
+        // the clicked one — otherwise orphan events pile up on Google.
+        eventIdsToRemove = result.deletedEventIds
       } else {
         await deleteMutation.mutateAsync(deleting.id)
         toast.success('Seduta eliminata')
       }
 
-      if (isConnected() && calendarEventId) {
-        try {
-          await removeSessionFromCalendar(calendarEventId)
-        } catch {
-          // non-fatal
+      if (isConnected() && eventIdsToRemove.length > 0) {
+        for (const eventId of eventIdsToRemove) {
+          try {
+            await removeSessionFromCalendar(eventId)
+          } catch {
+            // non-fatal
+          }
         }
       }
 
@@ -428,7 +527,9 @@ export default function SessionsPage() {
               : undefined
           }
           onAddToDiary={
-            editing
+            // Clinical notes require an individual patient — hidden for
+            // group sessions until group notes are supported.
+            editing && editing.patient_id
               ? () => {
                   setDiarySession(editing)
                   setModalOpen(false)
@@ -450,7 +551,7 @@ export default function SessionsPage() {
           onClose={() => setDeleting(null)}
           onConfirm={handleDelete}
           title="Eliminare la seduta?"
-          description={`La seduta con ${deleting?.patients?.last_name} ${deleting?.patients?.first_name} verrà rimossa. L'azione non è reversibile.`}
+          description={`La seduta con ${sessionDisplayName(deleting)} verrà rimossa. L'azione non è reversibile.`}
           confirmText="Elimina"
           destructive
           loading={deleteMutation.isPending}
@@ -466,7 +567,7 @@ export default function SessionsPage() {
         title="Eliminare seduta ricorrente"
         description={
           deleting
-            ? `${deleting.patients?.last_name} ${deleting.patients?.first_name} — questa seduta fa parte di una serie ricorrente`
+            ? `${sessionDisplayName(deleting)} — questa seduta fa parte di una serie ricorrente`
             : ''
         }
         size="md"
@@ -544,6 +645,57 @@ export default function SessionsPage() {
         </div>
       </Modal>
 
+      {/* Update-scope modal for recurring sessions (stacks over the form) */}
+      <Modal
+        isOpen={!!pendingScopedData}
+        onClose={() => setPendingScopedData(null)}
+        title="Modifica seduta ricorrente"
+        description="A quali sedute vuoi applicare le modifiche?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => applyScopedUpdate('one')}
+              disabled={updateScopedMutation.isPending}
+              className="w-full flex items-start gap-3 p-3 rounded-md border border-border text-left hover:border-foreground/20 hover:bg-secondary/40 transition-colors"
+            >
+              <div>
+                <p className="font-medium text-sm">Solo questa seduta</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Le altre occorrenze della serie restano invariate
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => applyScopedUpdate('this_and_following')}
+              disabled={updateScopedMutation.isPending}
+              className="w-full flex items-start gap-3 p-3 rounded-md border border-border text-left hover:border-foreground/20 hover:bg-secondary/40 transition-colors"
+            >
+              <div>
+                <p className="font-medium text-sm">Questa e tutte le successive</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Un cambio di orario viene applicato come spostamento a ogni
+                  occorrenza futura (es. tutte spostate un'ora dopo). Lo stato
+                  vale solo per questa seduta.
+                </p>
+              </div>
+            </button>
+          </div>
+          <div className="flex justify-end pt-3 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={() => setPendingScopedData(null)}
+              disabled={updateScopedMutation.isPending}
+            >
+              Annulla
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Quick payment modal */}
       <Modal
         isOpen={!!payingSession}
@@ -554,14 +706,14 @@ export default function SessionsPage() {
         title="Registra pagamento"
         description={
           payingSession
-            ? `${payingSession.patients?.last_name} ${payingSession.patients?.first_name} — ${payingSession.service_types?.name}`
+            ? `${sessionDisplayName(payingSession)} — ${payingSession.service_types?.name}`
             : ''
         }
         size="md"
       >
         {payingSession && (() => {
           const sessionPrice = Number(payingSession.service_types?.price || 0)
-          const previousBalance = balanceMap.get(payingSession.patient_id) || 0
+          const previousBalance = computePreviousBalance(payingSession)
           const suggested = Math.max(0, sessionPrice + previousBalance)
           const isDebit = previousBalance > 0
           const isCredit = previousBalance < 0
@@ -636,6 +788,7 @@ export default function SessionsPage() {
 
                     await createPaymentMutation.mutateAsync({
                       patient_id: payingSession.patient_id,
+                      group_id: payingSession.group_id ?? null,
                       session_id: payingSession.id,
                       amount,
                       payment_date: new Date().toISOString().split('T')[0],
@@ -668,14 +821,14 @@ export default function SessionsPage() {
         title="Aggiungi al diario clinico"
         description={
           diarySession
-            ? `${diarySession.patients?.last_name} ${diarySession.patients?.first_name} — seduta del ${new Date(diarySession.scheduled_at).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short' })}`
+            ? `${sessionDisplayName(diarySession)} — seduta del ${new Date(diarySession.scheduled_at).toLocaleString('it-IT', { dateStyle: 'long', timeStyle: 'short' })}`
             : ''
         }
         size="lg"
       >
         {diarySession && (
           <ClinicalNoteForm
-            defaultPatientId={diarySession.patient_id}
+            defaultPatientId={diarySession.patient_id ?? undefined}
             defaultSessionId={diarySession.id}
             defaultNoteDate={(() => {
               const d = new Date(diarySession.scheduled_at)

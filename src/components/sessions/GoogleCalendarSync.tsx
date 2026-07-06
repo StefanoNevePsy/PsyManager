@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { Calendar, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { it } from 'date-fns/locale'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
 import { Button } from '@/components/ui'
@@ -15,7 +17,14 @@ export default function GoogleCalendarSync() {
     initialized,
   } = useGoogleCalendarStore()
 
-  const { syncing, syncProgress, error: syncError, fullSync, unmappedEvents } = useGoogleCalendarSync()
+  const {
+    syncing,
+    syncProgress,
+    error: syncError,
+    fullSync,
+    unmappedEvents,
+    lastSyncAt,
+  } = useGoogleCalendarSync()
 
   useEffect(() => {
     if (!initialized) {
@@ -62,6 +71,12 @@ export default function GoogleCalendarSync() {
             <Button variant="ghost" size="sm" onClick={disconnect}>
               Disconnetti
             </Button>
+            {lastSyncAt && (
+              <span className="text-xs text-muted-foreground">
+                Ultima sincronizzazione:{' '}
+                {formatDistanceToNow(lastSyncAt, { addSuffix: true, locale: it })}
+              </span>
+            )}
           </>
         ) : (
           <Button size="sm" onClick={connect} loading={loading}>

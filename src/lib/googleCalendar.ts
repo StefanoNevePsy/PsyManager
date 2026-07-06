@@ -16,10 +16,16 @@ export interface GoogleTokenInfo {
 
 export interface GoogleCalendarEvent {
   id?: string
-  summary: string
+  // Present on events returned by events.list; 'cancelled' marks a deletion
+  // (always present when using showDeleted=true or a sync token).
+  status?: string
+  // Cancelled events returned by Google often omit summary/start/end
+  // entirely, so these are optional even though we always set them when
+  // creating/updating events ourselves.
+  summary?: string
   description?: string
-  start: { dateTime: string; timeZone?: string }
-  end: { dateTime: string; timeZone?: string }
+  start?: { dateTime: string; timeZone?: string }
+  end?: { dateTime: string; timeZone?: string }
   extendedProperties?: {
     private?: Record<string, string>
   }
@@ -197,8 +203,24 @@ export const requestAccessToken = (clientId: string) =>
  * token if Google still recognizes the user's session, or rejects if the
  * user needs to re-authenticate interactively.
  */
+// Single-flight guard: several concurrent apiCall()s (fullSync runs batches
+// of 5) can all discover an expired/expiring token at once. Without this,
+// each would kick off its own silent refresh — hammering Google's endpoint
+// and, on native, potentially racing the Capacitor plugin. All concurrent
+// callers instead await the same in-flight promise.
+let inFlightSilentRefresh: Promise<GoogleTokenInfo> | null = null
+
+const requestAccessTokenSilentShared = (clientId: string): Promise<GoogleTokenInfo> => {
+  if (!inFlightSilentRefresh) {
+    inFlightSilentRefresh = requestToken(clientId, true).finally(() => {
+      inFlightSilentRefresh = null
+    })
+  }
+  return inFlightSilentRefresh
+}
+
 export const requestAccessTokenSilent = (clientId: string) =>
-  requestToken(clientId, true)
+  requestAccessTokenSilentShared(clientId)
 
 /**
  * Returns the current token if still valid, otherwise attempts a silent
@@ -221,6 +243,20 @@ export const ensureValidToken = async (
     return fresh
   } catch {
     return null
+  }
+}
+
+/**
+ * Error raised for non-OK Google API responses, carrying the HTTP status so
+ * callers can branch on specific codes (e.g. 410 GONE for expired sync
+ * tokens) without parsing the error message string.
+ */
+export class GoogleApiHttpError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'GoogleApiHttpError'
+    this.status = status
   }
 }
 
@@ -257,26 +293,29 @@ const apiCall = async <T>(
   let response = await performFetch(path, options, token)
 
   // Step 2: if Google rejects the token (e.g., revoked outside our control),
-  // attempt one silent refresh and retry the request once.
+  // attempt one silent refresh and retry the request once. Uses the shared
+  // single-flight refresh so concurrent 401s from a parallel batch don't
+  // each trigger their own refresh.
   if (response.status === 401 && clientId) {
     try {
-      const fresh = await requestAccessTokenSilent(clientId)
+      const fresh = await requestAccessTokenSilentShared(clientId)
       response = await performFetch(path, options, fresh)
     } catch {
       // Silent refresh failed — clear token so UI shows "Reconnect"
       clearToken()
-      throw new Error('Google authentication expired')
+      throw new GoogleApiHttpError('Google authentication expired', 401)
     }
   }
 
   if (!response.ok) {
     if (response.status === 401) {
       clearToken()
-      throw new Error('Google authentication expired')
+      throw new GoogleApiHttpError('Google authentication expired', 401)
     }
     const error = await response.json().catch(() => ({}))
-    throw new Error(
-      error.error?.message || `Google API error: ${response.statusText}`
+    throw new GoogleApiHttpError(
+      error.error?.message || `Google API error: ${response.statusText}`,
+      response.status
     )
   }
 
@@ -306,6 +345,113 @@ export const listEvents = async (
   )
 
   return data.items || []
+}
+
+const SYNC_TOKEN_KEY = 'psymanager:gcal_sync_token'
+
+const getSyncToken = (): string | null => localStorage.getItem(SYNC_TOKEN_KEY)
+const saveSyncToken = (token: string) => localStorage.setItem(SYNC_TOKEN_KEY, token)
+const clearSyncToken = () => localStorage.removeItem(SYNC_TOKEN_KEY)
+
+export interface IncrementalSyncResult {
+  events: GoogleCalendarEvent[]
+  /** true when this was a full window fetch (no sync token available / token expired) */
+  isFullSync: boolean
+}
+
+interface EventsListPage {
+  items?: GoogleCalendarEvent[]
+  nextPageToken?: string
+  nextSyncToken?: string
+}
+
+/**
+ * Follows nextPageToken across all pages of an events.list call. Google only
+ * returns nextSyncToken on the LAST page (once there's no more
+ * nextPageToken), so it's only captured once pagination is exhausted.
+ */
+const fetchAllPages = async (
+  calendarId: string,
+  baseParams: URLSearchParams
+): Promise<{ events: GoogleCalendarEvent[]; nextSyncToken?: string }> => {
+  let events: GoogleCalendarEvent[] = []
+  let pageToken: string | undefined
+  let nextSyncToken: string | undefined
+
+  do {
+    const params = new URLSearchParams(baseParams)
+    if (pageToken) params.set('pageToken', pageToken)
+
+    const data = await apiCall<EventsListPage>(
+      `/calendars/${encodeURIComponent(calendarId)}/events?${params}`
+    )
+
+    events = events.concat(data.items || [])
+    pageToken = data.nextPageToken
+    if (data.nextSyncToken) nextSyncToken = data.nextSyncToken
+  } while (pageToken)
+
+  return { events, nextSyncToken }
+}
+
+/**
+ * Incremental events.list using Google's sync tokens, falling back to a full
+ * paginated window fetch when there's no stored token yet (or it expired).
+ *
+ * Google Calendar API caveats handled here:
+ * - A syncToken CANNOT be combined with timeMin/timeMax/orderBy/showDeleted —
+ *   those are only valid on the initial full-sync request. The incremental
+ *   request passes only syncToken + pagination (singleEvents is kept since
+ *   the API forbids turning off recurring-event expansion once a sync token
+ *   is in play).
+ * - Deleted events come back with status: 'cancelled' automatically when
+ *   using a sync token (showDeleted is implied), no matter the calendar's
+ *   default.
+ * - If the token is too old/invalid, Google responds 410 GONE — the stored
+ *   token is cleared and the call is retried once as a full sync.
+ */
+export const listEventsIncremental = async (
+  calendarId = 'primary',
+  timeMin?: Date,
+  timeMax?: Date
+): Promise<IncrementalSyncResult> => {
+  const runFullSync = async (): Promise<IncrementalSyncResult> => {
+    const params = new URLSearchParams({
+      singleEvents: 'true',
+      showDeleted: 'true',
+      maxResults: '250',
+      orderBy: 'startTime',
+    })
+    if (timeMin) params.set('timeMin', timeMin.toISOString())
+    if (timeMax) params.set('timeMax', timeMax.toISOString())
+
+    const { events, nextSyncToken } = await fetchAllPages(calendarId, params)
+    if (nextSyncToken) saveSyncToken(nextSyncToken)
+    return { events, isFullSync: true }
+  }
+
+  const storedToken = getSyncToken()
+  if (!storedToken) {
+    return runFullSync()
+  }
+
+  try {
+    const params = new URLSearchParams({
+      syncToken: storedToken,
+      maxResults: '250',
+      singleEvents: 'true',
+    })
+    const { events, nextSyncToken } = await fetchAllPages(calendarId, params)
+    if (nextSyncToken) saveSyncToken(nextSyncToken)
+    return { events, isFullSync: false }
+  } catch (err) {
+    if (err instanceof GoogleApiHttpError && err.status === 410) {
+      // Sync token expired or invalid — Google requires a fresh full sync.
+      clearSyncToken()
+      return runFullSync()
+    }
+    throw err
+  }
 }
 
 export const createEvent = async (
@@ -348,31 +494,36 @@ export const deleteEvent = async (
 }
 
 export const sessionToGoogleEvent = (
-  patientName: string,
+  displayName: string,
   serviceName: string,
   scheduledAt: string,
   durationMinutes: number,
-  notes: string | undefined,
-  patientId: string,
+  notes: string | null | undefined,
+  patientId: string | null | undefined,
   serviceTypeId: string,
-  sessionId: string
+  sessionId: string,
+  groupId?: string | null
 ): GoogleCalendarEvent => {
   const start = new Date(scheduledAt)
   const end = new Date(start.getTime() + durationMinutes * 60000)
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
+  // Google requires string values here — never include null/undefined keys
+  const privateProps: Record<string, string> = {
+    appId: 'psymanager',
+    serviceTypeId,
+    sessionId,
+  }
+  if (patientId) privateProps.patientId = patientId
+  if (groupId) privateProps.groupId = groupId
+
   return {
-    summary: `[${serviceName}] ${patientName}`,
+    summary: `[${serviceName}] ${displayName}`,
     description: notes || '',
     start: { dateTime: start.toISOString(), timeZone: tz },
     end: { dateTime: end.toISOString(), timeZone: tz },
     extendedProperties: {
-      private: {
-        appId: 'psymanager',
-        patientId,
-        serviceTypeId,
-        sessionId,
-      },
+      private: privateProps,
     },
   }
 }

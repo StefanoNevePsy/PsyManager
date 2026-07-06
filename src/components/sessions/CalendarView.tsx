@@ -16,6 +16,7 @@ import { Button } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
 import { usePatientBalanceMap } from '@/hooks/usePayments'
+import { sessionShortName, SESSION_STATUS_LABELS } from '@/lib/sessionDisplay'
 
 interface Props {
   currentDate: Date
@@ -113,6 +114,8 @@ export default function CalendarView({
                 <div className="space-y-1">
                   {daySessions.slice(0, 3).map((session) => {
                     const color = getServiceColor(session.service_type_id)
+                    const inactive =
+                      session.status === 'cancelled' || session.status === 'no_show'
                     return (
                       <div
                         key={session.id}
@@ -120,8 +123,12 @@ export default function CalendarView({
                           e.stopPropagation()
                           onSessionClick(session)
                         }}
-                        title={session.service_types?.name}
-                        className="text-xs px-1 py-0.5 rounded truncate cursor-pointer border transition-colors"
+                        title={`${session.service_types?.name ?? ''}${
+                          inactive ? ` · ${SESSION_STATUS_LABELS[session.status]}` : ''
+                        }`}
+                        className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer border transition-colors ${
+                          inactive ? 'opacity-50 line-through' : ''
+                        }`}
                         style={color.pillStyle}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor =
@@ -135,9 +142,10 @@ export default function CalendarView({
                         <span className="font-medium">
                           {format(new Date(session.scheduled_at), 'HH:mm')}
                         </span>{' '}
-                        {session.patients?.last_name}
+                        {sessionShortName(session)}
                         {(() => {
-                          const bal = balanceMap.get(session.patient_id) || 0
+                          const bal =
+                            balanceMap.get(session.patient_id ?? session.group_id ?? '') || 0
                           if (Math.abs(bal) < 0.01) return null
                           return (
                             <span

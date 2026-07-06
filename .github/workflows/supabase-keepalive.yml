@@ -1,0 +1,55 @@
+name: Supabase Keep-Alive
+
+# Supabase free tier pauses projects after ~7 days without API activity.
+# This workflow pings the database every 3 days to prevent sleep.
+# The REST query is minimal and read-only; RLS returns an empty array (fine).
+# Note: GitHub disables scheduled workflows after 60 days without repository
+# activity. If that happens, re-enable this workflow from the Actions tab.
+
+on:
+  schedule:
+    - cron: '17 6 */3 * *'  # Every 3 days at 06:17 UTC (avoids minute 0)
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping Supabase database
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          set +e  # Don't exit on first failure
+
+          # Attempt 1
+          curl --fail --silent --show-error \
+            "$SUPABASE_URL/rest/v1/users?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -o /dev/null
+
+          RESULT=$?
+
+          # If failed, sleep and retry once
+          if [ $RESULT -ne 0 ]; then
+            echo "First attempt failed, sleeping 30s and retrying..."
+            sleep 30
+
+            curl --fail --silent --show-error \
+              "$SUPABASE_URL/rest/v1/users?select=id&limit=1" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              -o /dev/null
+
+            RESULT=$?
+          fi
+
+          if [ $RESULT -eq 0 ]; then
+            echo "✓ Supabase keep-alive ping successful"
+          else
+            echo "✗ Supabase keep-alive ping failed after 2 attempts"
+            exit 1
+          fi

@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core'
 import { LocalNotifications, ScheduleOptions } from '@capacitor/local-notifications'
 import { ReminderSettings } from '@/hooks/useReminderSettings'
 import { SessionWithRelations } from '@/hooks/useSessions'
+import { sessionDisplayName } from '@/lib/sessionDisplay'
 
 const isSupported = () => Capacitor.isNativePlatform()
 
@@ -47,27 +48,12 @@ const buildPendingReminders = (
   const reminders: PendingReminder[] = []
 
   for (const s of sessions) {
+    // No reminders for cancelled / no-show sessions
+    if (s.status === 'cancelled' || s.status === 'no_show') continue
+
     const start = new Date(s.scheduled_at).getTime()
     const end = start + s.duration_minutes * 60_000
-
-    // Build a human-readable label for the notification.
-    // Group sessions show "Seduta di Coppia"/"Familiare" instead of a name.
-    let patient: string
-    if (s.group_id) {
-      patient =
-        s.session_type === 'coppia'
-          ? 'Seduta di Coppia'
-          : s.session_type === 'familiare'
-            ? 'Seduta Familiare'
-            : 'Seduta di Gruppo'
-    } else if (s.patients) {
-      const last = s.patients.last_name ?? ''
-      const first = s.patients.first_name ?? ''
-      patient = `${last} ${first}`.trim() || 'Paziente'
-    } else {
-      patient = 'Paziente'
-    }
-
+    const patient = sessionDisplayName(s)
     const service = s.service_types?.name ?? ''
 
     if (settings.pre_session_enabled) {
@@ -175,9 +161,35 @@ export const syncReminders = async (
     }
   }
 
-  // Schedule what we want. Skip ids that are already pending and unchanged.
-  const pendingIds = new Set(pending.notifications.map((n) => n.id))
-  const toSchedule = desired.filter((r) => !pendingIds.has(r.id))
+  // Schedule what we want. An id that's already pending is only "up to date"
+  // if its trigger time still matches — a rescheduled session keeps the same
+  // notification id but needs a different time, so cancel + re-schedule it.
+  const pendingAtById = new Map<number, number | null>()
+  for (const n of pending.notifications) {
+    const at = (n as { schedule?: { at?: string | Date } }).schedule?.at
+    pendingAtById.set(n.id, at ? new Date(at).getTime() : null)
+  }
+  const toSchedule = desired.filter((r) => {
+    if (!pendingAtById.has(r.id)) return true
+    const pendingAt = pendingAtById.get(r.id)
+    // If the OS didn't report the trigger time, be safe and re-schedule
+    if (pendingAt == null) return true
+    return Math.abs(pendingAt - r.at.getTime()) > 60_000
+  })
+
+  // Cancel stale-time duplicates before re-scheduling them
+  const staleIds = toSchedule
+    .map((r) => r.id)
+    .filter((id) => pendingAtById.has(id))
+  if (staleIds.length > 0) {
+    try {
+      await LocalNotifications.cancel({
+        notifications: staleIds.map((id) => ({ id })),
+      })
+    } catch {
+      // ignore
+    }
+  }
 
   if (toSchedule.length > 0) {
     const opts: ScheduleOptions = {

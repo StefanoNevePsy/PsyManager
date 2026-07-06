@@ -506,7 +506,8 @@ export const sessionToGoogleEvent = (
   patientId: string | null | undefined,
   serviceTypeId: string,
   sessionId: string,
-  groupId?: string | null
+  groupId?: string | null,
+  colorId?: string | null
 ): GoogleCalendarEvent => {
   const start = new Date(scheduledAt)
   const end = new Date(start.getTime() + durationMinutes * 60000)
@@ -529,5 +530,6 @@ export const sessionToGoogleEvent = (
     extendedProperties: {
       private: privateProps,
     },
+    ...(colorId ? { colorId } : {}),
   }
 }

@@ -1,10 +1,22 @@
-import { useEffect } from 'react'
-import { Calendar, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Calendar, RefreshCw, CheckCircle, AlertCircle, Sparkles } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { useGoogleCalendarStore } from '@/stores/googleCalendarStore'
 import { useGoogleCalendarSync } from '@/hooks/useGoogleCalendarSync'
-import { Button } from '@/components/ui'
+import {
+  useCalendarSettings,
+  useUpdateCalendarSettings,
+  DEFAULT_CALENDAR_SETTINGS,
+} from '@/hooks/useCalendarSettings'
+import { Button, Select, useToast } from '@/components/ui'
+import { CalendarTitleFormat } from '@/types/database'
+
+const TITLE_FORMAT_OPTIONS: { value: CalendarTitleFormat; label: string }[] = [
+  { value: 'full', label: 'Nome completo (Rossi Mario)' },
+  { value: 'first_initial', label: 'Nome e iniziale (Mario R.)' },
+  { value: 'initials', label: 'Solo iniziali (M.R.)' },
+]
 
 export default function GoogleCalendarSync() {
   const {
@@ -22,9 +34,19 @@ export default function GoogleCalendarSync() {
     syncProgress,
     error: syncError,
     fullSync,
+    repushAll,
     unmappedEvents,
     lastSyncAt,
   } = useGoogleCalendarSync()
+
+  const { data: calendarSettings } = useCalendarSettings()
+  const updateCalendarSettings = useUpdateCalendarSettings()
+  const { toast } = useToast()
+  const [showApplyPrompt, setShowApplyPrompt] = useState(false)
+
+  const titleFormat = calendarSettings?.title_format ?? DEFAULT_CALENDAR_SETTINGS.title_format
+  const colorByService =
+    calendarSettings?.color_by_service ?? DEFAULT_CALENDAR_SETTINGS.color_by_service
 
   useEffect(() => {
     if (!initialized) {
@@ -33,6 +55,42 @@ export default function GoogleCalendarSync() {
   }, [initialized, initialize])
 
   const error = storeError || syncError
+
+  const handleTitleFormatChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value as CalendarTitleFormat
+    updateCalendarSettings.mutate(
+      { title_format: value },
+      {
+        onSuccess: () => {
+          toast.success('Preferenze calendario salvate')
+          setShowApplyPrompt(true)
+        },
+        onError: () => toast.error('Errore nel salvataggio delle preferenze'),
+      }
+    )
+  }
+
+  const handleColorToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked
+    updateCalendarSettings.mutate(
+      { color_by_service: checked },
+      {
+        onSuccess: () => {
+          toast.success('Preferenze calendario salvate')
+          setShowApplyPrompt(true)
+        },
+        onError: () => toast.error('Errore nel salvataggio delle preferenze'),
+      }
+    )
+  }
+
+  const handleApplyToExisting = async () => {
+    const count = await repushAll()
+    if (count > 0) {
+      toast.success(`${count} eventi aggiornati su Google Calendar`)
+    }
+    setShowApplyPrompt(false)
+  }
 
   return (
     <div className="space-y-3">
@@ -85,6 +143,52 @@ export default function GoogleCalendarSync() {
           </Button>
         )}
       </div>
+
+      {isConnected() && (
+        <div className="bg-secondary/50 p-3 rounded-lg space-y-3">
+          <div className="max-w-xs">
+            <Select
+              label="Nomi sul calendario"
+              value={titleFormat}
+              onChange={handleTitleFormatChange}
+              disabled={syncing}
+              options={TITLE_FORMAT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              I nomi abbreviati proteggono i dati dei pazienti sul tuo calendario Google.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={colorByService}
+              onChange={handleColorToggle}
+              disabled={syncing}
+              className="w-4 h-4 rounded border-border text-primary focus:ring-ring focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            Colora gli eventi per tipo di prestazione
+          </label>
+
+          {showApplyPrompt && (
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              <span className="text-xs text-muted-foreground">
+                Applica le nuove preferenze anche alle sedute già presenti sul calendario.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleApplyToExisting}
+                loading={syncing}
+                disabled={syncing}
+              >
+                <Sparkles className="w-4 h-4" />
+                Applica agli eventi esistenti
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {syncing && syncProgress && syncProgress.total > 0 && (
         <div className="bg-secondary/50 p-3 rounded-lg text-sm">

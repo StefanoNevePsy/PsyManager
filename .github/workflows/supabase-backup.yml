@@ -62,8 +62,11 @@ jobs:
           BACKUP_FILE="psymanager-$(date +%Y%m%d).dump"
           echo "backup_file=$BACKUP_FILE" >> "$GITHUB_OUTPUT"
 
+          # Use the versioned binary explicitly: the GitHub runner ships a
+          # preinstalled pg_dump 16 that wins on PATH, and pg_dump must be
+          # >= the server major version (Supabase runs PG 17).
           # The full connection URI carries the credentials — no PGPASSWORD needed
-          pg_dump \
+          /usr/lib/postgresql/17/bin/pg_dump \
             --format=custom \
             --no-owner \
             --no-privileges \

@@ -34,6 +34,21 @@ export interface ServiceColor {
   pillHoverStyle: { backgroundColor: string }
 }
 
+// Google Calendar event colorIds (1-11 fixed palette), matched to the
+// closest app palette entry above, index-aligned with PALETTE:
+// blue→Blueberry, purple→Grape, green→Sage, orange→Tangerine, pink→Flamingo,
+// teal→Peacock, amber→Banana, cyan→Peacock, violet→Lavender, emerald→Basil
+const GOOGLE_COLOR_IDS = ['9', '3', '2', '6', '4', '7', '5', '7', '1', '10'] as const
+
+/**
+ * Google Calendar colorId for a service type — same hash as getServiceColor,
+ * so the Google event color matches the in-app color of the service.
+ */
+export const getGoogleColorId = (id: string | null | undefined): string => {
+  const seed = id || 'default'
+  return GOOGLE_COLOR_IDS[hashString(seed) % GOOGLE_COLOR_IDS.length]
+}
+
 export const getServiceColor = (id: string | null | undefined): ServiceColor => {
   const seed = id || 'default'
   const entry = PALETTE[hashString(seed) % PALETTE.length]

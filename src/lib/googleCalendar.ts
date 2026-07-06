@@ -29,6 +29,10 @@ export interface GoogleCalendarEvent {
   extendedProperties?: {
     private?: Record<string, string>
   }
+  // Google Calendar's fixed colorId palette ('1'..'11'). Omitted when the
+  // user disables per-service coloring, or for older Google API responses
+  // that don't set it.
+  colorId?: string
 }
 
 declare global {
@@ -502,7 +506,8 @@ export const sessionToGoogleEvent = (
   patientId: string | null | undefined,
   serviceTypeId: string,
   sessionId: string,
-  groupId?: string | null
+  groupId?: string | null,
+  colorId?: string | null
 ): GoogleCalendarEvent => {
   const start = new Date(scheduledAt)
   const end = new Date(start.getTime() + durationMinutes * 60000)
@@ -525,5 +530,6 @@ export const sessionToGoogleEvent = (
     extendedProperties: {
       private: privateProps,
     },
+    ...(colorId ? { colorId } : {}),
   }
 }

@@ -35,13 +35,7 @@ import {
 import PaymentForm from '@/components/payments/PaymentForm'
 import { patientFullName } from '@/lib/sessionDisplay'
 import { PaymentFormData } from '@/lib/schemas'
-
-const paymentMethodLabels = {
-  cash: 'Contanti',
-  bank_transfer: 'Bonifico',
-  credit_card: 'Carta',
-  other: 'Altro',
-}
+import { PAYMENT_METHOD_LABELS } from '@/lib/netIncome'
 
 type Tab = 'payments' | 'balances'
 
@@ -101,12 +95,13 @@ export default function PaymentsPage() {
   const handleSubmit = async (data: PaymentFormData) => {
     try {
       const cleanData = {
-        patient_id: data.patient_id || undefined,
-        session_id: data.session_id || undefined,
+        patient_id: data.patient_id || null,
+        group_id: data.group_id || null,
+        session_id: data.session_id || null,
         amount: data.amount,
         payment_date: data.payment_date,
         payment_method: data.payment_method,
-        notes: data.notes || undefined,
+        notes: data.notes || null,
       }
 
       if (editing) {
@@ -285,7 +280,7 @@ export default function PaymentsPage() {
                                 : '—'}
                           </td>
                           <td className="py-3 px-5 text-muted-foreground">
-                            {paymentMethodLabels[p.payment_method as keyof typeof paymentMethodLabels] || p.payment_method}
+                            {PAYMENT_METHOD_LABELS[p.payment_method] || p.payment_method}
                           </td>
                           <td className="py-3 px-5 text-right font-semibold tabular-nums text-foreground">
                             € {eur(Number(p.amount))}
@@ -359,7 +354,7 @@ export default function PaymentsPage() {
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        {paymentMethodLabels[p.payment_method as keyof typeof paymentMethodLabels] || p.payment_method}
+                        {PAYMENT_METHOD_LABELS[p.payment_method] || p.payment_method}
                       </p>
                     </li>
                   ))}

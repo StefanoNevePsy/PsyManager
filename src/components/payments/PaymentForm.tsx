@@ -6,6 +6,7 @@ import { Button, Input, Select, Textarea } from '@/components/ui'
 import { patientFullName } from '@/lib/sessionDisplay'
 import { usePatients } from '@/hooks/usePatients'
 import { useServiceTypes } from '@/hooks/useServiceTypes'
+import { PAYMENT_METHOD_LABELS } from '@/lib/netIncome'
 import { Database } from '@/types/database'
 
 type Payment = Database['public']['Tables']['payments']['Row']
@@ -49,12 +50,15 @@ export default function PaymentForm({
 
   const selectedServiceTypeId = useWatch({ control, name: 'service_type_id' })
 
-  // Auto-fill amount from service type price
+  // Auto-fill amount + payment method from service type on selection change
   useEffect(() => {
     if (selectedServiceTypeId) {
       const st = serviceTypes.find((s) => s.id === selectedServiceTypeId)
       if (st) {
         setValue('amount', Number(st.price))
+        if (st.default_payment_method) {
+          setValue('payment_method', st.default_payment_method)
+        }
       }
     }
   }, [selectedServiceTypeId, serviceTypes, setValue])
@@ -116,12 +120,10 @@ export default function PaymentForm({
         label="Metodo di Pagamento *"
         {...register('payment_method')}
         error={errors.payment_method?.message}
-        options={[
-          { value: 'cash', label: 'Contanti' },
-          { value: 'bank_transfer', label: 'Bonifico' },
-          { value: 'credit_card', label: 'Carta di credito' },
-          { value: 'other', label: 'Altro' },
-        ]}
+        options={Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        }))}
       />
 
       <Textarea

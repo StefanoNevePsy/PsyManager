@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Download, BarChart3, TrendingUp, Users, Briefcase } from 'lucide-react'
+import { Download, BarChart3, TrendingUp, Users, Briefcase, Wallet } from 'lucide-react'
 import {
   startOfWeek,
   endOfWeek,

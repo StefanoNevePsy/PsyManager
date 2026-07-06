@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
+import { useTaxSettings } from './useTaxSettings'
 import {
   startOfMonth,
   format,
@@ -8,15 +9,22 @@ import {
   subMonths,
 } from 'date-fns'
 import { patientFullName, sessionDisplayName, isBillableStatus } from '@/lib/sessionDisplay'
+import { computeNet, computeSessionNet, DEFAULT_TAX_SETTINGS, TaxParams } from '@/lib/netIncome'
 
 export interface ReportData {
   totalIncome: number
   totalSessions: number
+  /** Estimated net after center share + taxes/ENPAP, summed over payments */
+  totalNetIncome: number
+  totalCenterShare: number
+  totalTaxes: number
   byServiceType: Array<{
     name: string
     type: 'private' | 'package'
     count: number
     income: number
+    /** Estimated net, based on the service type's default payment method */
+    netIncome: number
   }>
   byPatient: Array<{
     name: string
@@ -27,6 +35,7 @@ export interface ReportData {
     month: string
     income: number
     sessions: number
+    net: number
   }>
   payments: Array<{
     date: string
@@ -34,11 +43,28 @@ export interface ReportData {
     patientName: string
     method: string
     notes: string
+    net: number
+    centerShare: number
+    taxes: number
   }>
 }
 
+/** Center share (0-100) of the service type linked to a payment via its session, if any. */
+const centerPctOfPayment = (p: {
+  sessions?: { service_types?: { center_percentage?: number | null } | null } | null
+}): number => p.sessions?.service_types?.center_percentage ?? 0
+
 export const useReports = (startDate: Date, endDate: Date) => {
   const { user } = useAuth()
+  const { data: taxSettingsRow } = useTaxSettings()
+
+  const taxParams: TaxParams = {
+    coefficiente_redditivita:
+      taxSettingsRow?.coefficiente_redditivita ?? DEFAULT_TAX_SETTINGS.coefficiente_redditivita,
+    imposta_sostitutiva_pct:
+      taxSettingsRow?.imposta_sostitutiva_pct ?? DEFAULT_TAX_SETTINGS.imposta_sostitutiva_pct,
+    enpap_pct: taxSettingsRow?.enpap_pct ?? DEFAULT_TAX_SETTINGS.enpap_pct,
+  }
 
   return useQuery({
     queryKey: [
@@ -46,12 +72,18 @@ export const useReports = (startDate: Date, endDate: Date) => {
       user?.id,
       startDate.toISOString(),
       endDate.toISOString(),
+      taxParams.coefficiente_redditivita,
+      taxParams.imposta_sostitutiva_pct,
+      taxParams.enpap_pct,
     ],
     queryFn: async (): Promise<ReportData> => {
       if (!user) {
         return {
           totalIncome: 0,
           totalSessions: 0,
+          totalNetIncome: 0,
+          totalCenterShare: 0,
+          totalTaxes: 0,
           byServiceType: [],
           byPatient: [],
           monthlyTrend: [],
@@ -70,7 +102,7 @@ export const useReports = (startDate: Date, endDate: Date) => {
       ] = await Promise.all([
         supabase
           .from('payments')
-          .select('*, patients(*), patient_groups(*)')
+          .select('*, patients(*), patient_groups(*), sessions(*, service_types(*))')
           .eq('user_id', user.id)
           .gte('payment_date', startStr)
           .lte('payment_date', endStr),
@@ -86,10 +118,24 @@ export const useReports = (startDate: Date, endDate: Date) => {
         payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
       const totalSessions = sessions?.length || 0
 
+      // Net breakdown per payment (center share + estimated taxes/ENPAP)
+      const paymentNets = (payments || []).map((p) =>
+        computeNet(Number(p.amount), p.payment_method, centerPctOfPayment(p), taxParams)
+      )
+      const totalNetIncome = paymentNets.reduce((sum, n) => sum + n.net, 0)
+      const totalCenterShare = paymentNets.reduce((sum, n) => sum + n.centerShare, 0)
+      const totalTaxes = paymentNets.reduce((sum, n) => sum + n.taxes, 0)
+
       // By service type
       const serviceTypeMap = new Map<
         string,
-        { name: string; type: 'private' | 'package'; count: number; income: number }
+        {
+          name: string
+          type: 'private' | 'package'
+          count: number
+          income: number
+          netIncome: number
+        }
       >()
 
       for (const session of sessions || []) {
@@ -101,10 +147,16 @@ export const useReports = (startDate: Date, endDate: Date) => {
           type: session.service_types.type,
           count: 0,
           income: 0,
+          netIncome: 0,
         }
         existing.count += 1
         if (session.service_types.type === 'private') {
           existing.income += Number(session.service_types.price)
+          existing.netIncome += computeSessionNet(
+            Number(session.service_types.price),
+            session.service_types,
+            taxParams
+          ).net
         }
         serviceTypeMap.set(key, existing)
       }
@@ -154,7 +206,7 @@ export const useReports = (startDate: Date, endDate: Date) => {
 
       const { data: trendPayments } = await supabase
         .from('payments')
-        .select('amount, payment_date')
+        .select('amount, payment_date, payment_method, sessions(service_types(center_percentage))')
         .eq('user_id', user.id)
         .gte('payment_date', format(trendStart, 'yyyy-MM-dd'))
 
@@ -166,10 +218,15 @@ export const useReports = (startDate: Date, endDate: Date) => {
 
       const monthlyTrend = months.map((month) => {
         const monthKey = format(month, 'yyyy-MM')
-        const monthIncome =
-          trendPayments
-            ?.filter((p) => p.payment_date.startsWith(monthKey))
-            .reduce((sum, p) => sum + Number(p.amount), 0) || 0
+        const monthPaymentsInMonth =
+          trendPayments?.filter((p) => p.payment_date.startsWith(monthKey)) || []
+        const monthIncome = monthPaymentsInMonth.reduce((sum, p) => sum + Number(p.amount), 0)
+        const monthNet = monthPaymentsInMonth.reduce(
+          (sum, p) =>
+            sum +
+            computeNet(Number(p.amount), p.payment_method, centerPctOfPayment(p), taxParams).net,
+          0
+        )
         const monthSessionsCount =
           trendSessions?.filter((s) =>
             s.scheduled_at.startsWith(monthKey)
@@ -179,23 +236,33 @@ export const useReports = (startDate: Date, endDate: Date) => {
           month: format(month, 'MMM yyyy'),
           income: monthIncome,
           sessions: monthSessionsCount,
+          net: monthNet,
         }
       })
 
       // Payments list
-      const paymentsList = (payments || []).map((p) => ({
-        date: p.payment_date,
-        amount: Number(p.amount),
-        patientName: p.group_id
-          ? p.patient_groups?.name || 'Gruppo'
-          : patientFullName(p.patients) || '-',
-        method: p.payment_method,
-        notes: p.notes || '',
-      }))
+      const paymentsList = (payments || []).map((p) => {
+        const net = computeNet(Number(p.amount), p.payment_method, centerPctOfPayment(p), taxParams)
+        return {
+          date: p.payment_date,
+          amount: Number(p.amount),
+          patientName: p.group_id
+            ? p.patient_groups?.name || 'Gruppo'
+            : patientFullName(p.patients) || '-',
+          method: p.payment_method,
+          notes: p.notes || '',
+          net: net.net,
+          centerShare: net.centerShare,
+          taxes: net.taxes,
+        }
+      })
 
       return {
         totalIncome,
         totalSessions,
+        totalNetIncome,
+        totalCenterShare,
+        totalTaxes,
         byServiceType: Array.from(serviceTypeMap.values()).sort(
           (a, b) => b.income - a.income
         ),
@@ -220,12 +287,15 @@ export const exportToCSV = (data: ReportData, filename: string) => {
   lines.push('')
   lines.push(`Totale Incassato,${data.totalIncome.toFixed(2)}`)
   lines.push(`Totale Sedute,${data.totalSessions}`)
+  lines.push(`Netto Stimato,${data.totalNetIncome.toFixed(2)}`)
+  lines.push(`Quota Centri,${data.totalCenterShare.toFixed(2)}`)
+  lines.push(`Tasse+ENPAP Stimate,${data.totalTaxes.toFixed(2)}`)
   lines.push('')
   lines.push('GUADAGNI PER TIPO DI PRESTAZIONE')
-  lines.push('Nome,Tipo,Sedute,Incasso')
+  lines.push('Nome,Tipo,Sedute,Incasso,Netto')
   for (const item of data.byServiceType) {
     lines.push(
-      `${csvEscape(item.name)},${csvEscape(item.type === 'private' ? 'Privato' : 'Pacchetto')},${item.count},${item.income.toFixed(2)}`
+      `${csvEscape(item.name)},${csvEscape(item.type === 'private' ? 'Privato' : 'Pacchetto')},${item.count},${item.income.toFixed(2)},${item.netIncome.toFixed(2)}`
     )
   }
   lines.push('')
@@ -236,10 +306,10 @@ export const exportToCSV = (data: ReportData, filename: string) => {
   }
   lines.push('')
   lines.push('PAGAMENTI')
-  lines.push('Data,Paziente,Importo,Metodo,Note')
+  lines.push('Data,Paziente,Importo,Metodo,Netto,Quota centro,Tasse,Note')
   for (const p of data.payments) {
     lines.push(
-      `${p.date},${csvEscape(p.patientName)},${p.amount.toFixed(2)},${p.method},${csvEscape(p.notes)}`
+      `${p.date},${csvEscape(p.patientName)},${p.amount.toFixed(2)},${p.method},${p.net.toFixed(2)},${p.centerShare.toFixed(2)},${p.taxes.toFixed(2)},${csvEscape(p.notes)}`
     )
   }
 

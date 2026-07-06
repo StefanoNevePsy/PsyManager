@@ -19,6 +19,7 @@ import {
 } from '@/components/ui'
 import ServiceTypeForm from '@/components/service-types/ServiceTypeForm'
 import { ServiceTypeFormData } from '@/lib/schemas'
+import { getServiceColor } from '@/lib/serviceColors'
 import { Database } from '@/types/database'
 
 type ServiceType = Database['public']['Tables']['service_types']['Row']
@@ -46,11 +47,20 @@ export default function ServiceTypesPage() {
 
   const handleSubmit = async (data: ServiceTypeFormData) => {
     try {
+      const payload = {
+        name: data.name,
+        duration_minutes: data.duration_minutes,
+        price: data.price,
+        type: data.type,
+        color: data.color || null,
+        center_percentage: data.center_percentage,
+        default_payment_method: data.default_payment_method || null,
+      }
       if (editing) {
-        await updateMutation.mutateAsync({ id: editing.id, updates: data })
+        await updateMutation.mutateAsync({ id: editing.id, updates: payload })
         toast.success('Prestazione aggiornata')
       } else {
-        await createMutation.mutateAsync(data)
+        await createMutation.mutateAsync(payload)
         toast.success('Prestazione creata', { description: data.name })
       }
       setModalOpen(false)
@@ -114,6 +124,7 @@ export default function ServiceTypesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {serviceTypes.map((item) => {
             const isPackage = item.type === 'package'
+            const color = getServiceColor(item.id, item.color)
             return (
               <Card key={item.id} className="group">
                 <div className="flex items-start justify-between mb-4">
@@ -124,6 +135,11 @@ export default function ServiceTypesPage() {
                         : 'bg-muted text-muted-foreground'
                     }`}
                   >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color.hex }}
+                      aria-hidden="true"
+                    />
                     <Briefcase className="w-3 h-3" strokeWidth={2} />
                     {isPackage ? 'Pacchetto' : 'Privato'}
                   </span>

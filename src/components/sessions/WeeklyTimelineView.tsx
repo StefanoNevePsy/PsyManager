@@ -215,7 +215,7 @@ export default function WeeklyTimelineView({
 
                 {/* Session blocks */}
                 {daySessions.map((session) => {
-                  const color = getServiceColor(session.service_type_id)
+                  const color = getServiceColor(session.service_type_id, session.service_types?.color)
                   const end = addMinutes(
                     new Date(session.scheduled_at),
                     session.duration_minutes

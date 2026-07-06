@@ -208,6 +208,33 @@ Suggerimento iniziale:
 - Component test per form (mock React Query)
 - Integration test per i flow critici (login, create patient)
 
+## Backup e Keep-Alive (GitHub Actions)
+
+Due workflow automatici proteggono il database Supabase free tier:
+
+### 1. Supabase Keep-Alive (`.github/workflows/supabase-keepalive.yml`)
+- **Quando**: ogni 3 giorni (cron `17 6 */3 * *`)
+- **Cosa fa**: ping della REST API al database
+- **Motivo**: Supabase mette in pausa i progetti free dopo ~7 giorni senza attività
+- **Note**: Non richiede nuovi secret; usa i secret di build esistenti (`VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`)
+- ⚠️ GitHub disabilita i workflow schedulati dopo 60 giorni senza attività al repo. Se accade, ri-abilitare manualmente dalla tab **Actions**.
+
+### 2. Supabase Weekly Backup (`.github/workflows/supabase-backup.yml`)
+- **Quando**: ogni lunedì alle 04:23 UTC (cron `23 4 * * 1`)
+- **Cosa fa**: dump logico del database in formato custom PostgreSQL, crittografato con AES-256-CBC
+- **Motivo**: Supabase free tier NON ha backup automatici
+- **Artifacts**: backups crittografati conservati per 90 giorni (scaricabili da Actions → Artifacts)
+- **Secret richiesti** (da configurare in GitHub → Settings → Secrets and variables → Actions):
+  - `SUPABASE_DB_URL`: connection string Supabase (da Supabase Dashboard → Project Settings → Database, copiare l'URI del "Session pooler" per compatibilità IPv4)
+  - `BACKUP_PASSPHRASE`: passphrase di crittografia (32+ caratteri casuali; **conservare al sicuro** — senza di essa i backup sono irrecuperabili)
+- **Restore**: 
+  ```bash
+  # Decrittare
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in file.enc -out file.dump -pass pass:PASSPHRASE
+  # Ripristinare
+  pg_restore --clean --if-exists -d postgres://[connection_string] file.dump
+  ```
+
 ## Resources
 
 - [Supabase Docs](https://supabase.com/docs)

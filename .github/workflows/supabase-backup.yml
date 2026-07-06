@@ -1,0 +1,113 @@
+name: Supabase Weekly Backup
+
+# Supabase free tier has NO automated backups.
+# This workflow creates a weekly encrypted logical dump of the database.
+#
+# REQUIRED SECRETS (create in GitHub Settings → Secrets and variables → Actions):
+#
+# 1. SUPABASE_DB_URL
+#    Source: Supabase Dashboard → Project Settings → Database
+#    Copy the "Session pooler" URI (IPv4 compatible, connection pooling enabled).
+#    Format: postgres://[user]:[password]@[host]:[port]/[database]
+#
+# 2. BACKUP_PASSPHRASE
+#    Any strong passphrase (e.g., 32+ random chars). KEEP IT SAFE — without it,
+#    backups are unrecoverable. Store in a password manager.
+#
+# RESTORE PROCEDURE:
+#   1. Decrypt: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in file.enc -out file.dump -pass pass:PASSPHRASE
+#   2. Restore: pg_restore --clean --if-exists -d postgres://[connection_string] file.dump
+
+on:
+  schedule:
+    - cron: '23 4 * * 1'  # Every Monday at 04:23 UTC (avoids minute 0)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check SUPABASE_DB_URL secret
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "ERROR: SUPABASE_DB_URL secret is not configured."
+            echo "Please set it in GitHub Settings → Secrets and variables → Actions"
+            echo "Value should be the Supabase 'Session pooler' URI from Dashboard → Project Settings → Database"
+            exit 1
+          fi
+          echo "✓ SUPABASE_DB_URL is configured"
+
+      - name: Add PostgreSQL repository and install client
+        run: |
+          # PGDG repo with signed-by keyring (apt-key was removed in Ubuntu 24.04)
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+          # pg_dump must be >= the server major version (Supabase runs PG 15/17)
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Create database backup
+        id: backup
+        env:
+          PGCONNECT_TIMEOUT: '15'
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          BACKUP_FILE="psymanager-$(date +%Y%m%d).dump"
+          echo "backup_file=$BACKUP_FILE" >> "$GITHUB_OUTPUT"
+
+          # The full connection URI carries the credentials — no PGPASSWORD needed
+          pg_dump \
+            --format=custom \
+            --no-owner \
+            --no-privileges \
+            --file="$BACKUP_FILE" \
+            "$DB_URL"
+
+          echo "✓ Database backup created: $BACKUP_FILE"
+          ls -lh "$BACKUP_FILE"
+
+      - name: Encrypt backup
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          BACKUP_FILE: ${{ steps.backup.outputs.backup_file }}
+        run: |
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "ERROR: BACKUP_PASSPHRASE secret is not configured."
+            exit 1
+          fi
+
+          echo "Encrypting backup with AES-256-CBC..."
+          openssl enc \
+            -aes-256-cbc \
+            -pbkdf2 \
+            -iter 200000 \
+            -salt \
+            -in "$BACKUP_FILE" \
+            -out "${BACKUP_FILE}.enc" \
+            -pass env:BACKUP_PASSPHRASE
+
+          if [ $? -eq 0 ]; then
+            echo "✓ Backup encrypted: ${BACKUP_FILE}.enc"
+            ls -lh "${BACKUP_FILE}.enc"
+
+            # Securely delete plaintext dump
+            shred -vfz -n 3 "$BACKUP_FILE" 2>/dev/null || rm -f "$BACKUP_FILE"
+            echo "✓ Plaintext backup securely deleted"
+          else
+            echo "✗ Encryption failed"
+            exit 1
+          fi
+
+      - name: Upload encrypted backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_id }}
+          path: ${{ steps.backup.outputs.backup_file }}.enc
+          retention-days: 90

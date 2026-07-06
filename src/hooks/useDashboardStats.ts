@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
+import { useTaxSettings } from './useTaxSettings'
 import {
   startOfMonth,
   endOfMonth,
@@ -11,6 +12,7 @@ import {
   format,
 } from 'date-fns'
 import { patientFullName, sessionDisplayName, isBillableStatus } from '@/lib/sessionDisplay'
+import { computeNet, DEFAULT_TAX_SETTINGS, TaxParams } from '@/lib/netIncome'
 
 export interface PatientBalanceLite {
   patientId: string
@@ -24,6 +26,8 @@ export interface DashboardStats {
   activePatients: number
   monthSessions: number
   monthIncome: number
+  /** Estimated net income for the current month (center share + taxes/ENPAP deducted) */
+  monthNetIncome: number
   yearProjection: number
   todaySessions: Array<{
     id: string
@@ -57,15 +61,31 @@ const SESSION_WITH_RELATIONS_SELECT = '*, patients(*), service_types(*), patient
 
 export const useDashboardStats = () => {
   const { user } = useAuth()
+  const { data: taxSettingsRow } = useTaxSettings()
+
+  const taxParams: TaxParams = {
+    coefficiente_redditivita:
+      taxSettingsRow?.coefficiente_redditivita ?? DEFAULT_TAX_SETTINGS.coefficiente_redditivita,
+    imposta_sostitutiva_pct:
+      taxSettingsRow?.imposta_sostitutiva_pct ?? DEFAULT_TAX_SETTINGS.imposta_sostitutiva_pct,
+    enpap_pct: taxSettingsRow?.enpap_pct ?? DEFAULT_TAX_SETTINGS.enpap_pct,
+  }
 
   return useQuery({
-    queryKey: ['dashboard_stats', user?.id],
+    queryKey: [
+      'dashboard_stats',
+      user?.id,
+      taxParams.coefficiente_redditivita,
+      taxParams.imposta_sostitutiva_pct,
+      taxParams.enpap_pct,
+    ],
     queryFn: async (): Promise<DashboardStats> => {
       if (!user) {
         return {
           activePatients: 0,
           monthSessions: 0,
           monthIncome: 0,
+          monthNetIncome: 0,
           yearProjection: 0,
           todaySessions: [],
           upcomingSessions: [],
@@ -105,7 +125,7 @@ export const useDashboardStats = () => {
           .lte('scheduled_at', monthEnd.toISOString()),
         supabase
           .from('payments')
-          .select('amount')
+          .select('amount, payment_method, sessions(service_types(center_percentage))')
           .eq('user_id', user.id)
           .gte('payment_date', format(monthStart, 'yyyy-MM-dd'))
           .lte('payment_date', format(monthEnd, 'yyyy-MM-dd')),
@@ -155,6 +175,12 @@ export const useDashboardStats = () => {
 
       const monthIncome =
         monthPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
+
+      const monthNetIncome =
+        monthPayments?.reduce((sum, p: any) => {
+          const centerPct = p.sessions?.service_types?.center_percentage ?? 0
+          return sum + computeNet(Number(p.amount), p.payment_method, centerPct, taxParams).net
+        }, 0) || 0
 
       const yearIncome =
         yearPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0
@@ -263,6 +289,7 @@ export const useDashboardStats = () => {
         activePatients: patients?.length || 0,
         monthSessions: monthSessions?.length || 0,
         monthIncome,
+        monthNetIncome,
         yearProjection,
         todaySessions: orderedToday,
         upcomingSessions: (upcomingData || []).map(mapUpcomingSession),

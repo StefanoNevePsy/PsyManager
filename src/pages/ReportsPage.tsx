@@ -131,6 +131,66 @@ export default function ReportsPage() {
 
       <Card>
         <div className="flex items-center gap-2 mb-5">
+          <Wallet className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
+          <h2 className="font-display text-xl font-semibold tracking-tight">
+            Lordo vs Netto stimato
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border rounded-lg overflow-hidden border border-border">
+          <div className="bg-card p-4">
+            <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+              Lordo
+            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24 bg-muted" />
+            ) : (
+              <p className="font-display text-2xl font-semibold tabular-nums tracking-tight">
+                € {eur(data?.totalIncome ?? 0)}
+              </p>
+            )}
+          </div>
+          <div className="bg-card p-4">
+            <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+              Quota centri
+            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24 bg-muted" />
+            ) : (
+              <p className="font-display text-2xl font-semibold tabular-nums tracking-tight text-warning">
+                € {eur(data?.totalCenterShare ?? 0)}
+              </p>
+            )}
+          </div>
+          <div className="bg-card p-4">
+            <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+              Tasse + ENPAP stimate
+            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24 bg-muted" />
+            ) : (
+              <p className="font-display text-2xl font-semibold tabular-nums tracking-tight text-warning">
+                € {eur(data?.totalTaxes ?? 0)}
+              </p>
+            )}
+          </div>
+          <div className="bg-card p-4">
+            <p className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+              Netto stimato
+            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24 bg-muted" />
+            ) : (
+              <p className="font-display text-2xl font-semibold tabular-nums tracking-tight text-success">
+                € {eur(data?.totalNetIncome ?? 0)}
+              </p>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-2 mb-5">
           <TrendingUp className="w-4 h-4 text-muted-foreground" strokeWidth={1.85} />
           <h2 className="font-display text-xl font-semibold tracking-tight">
             Andamento ultimi 6 mesi
@@ -159,6 +219,9 @@ export default function ReportsPage() {
                     € {eur(m.income)}
                     <span className="text-xs text-muted-foreground ml-2 font-normal">
                       {m.sessions} sedute
+                    </span>
+                    <span className="text-xs text-success ml-2 font-normal">
+                      netto € {eur(m.net)}
                     </span>
                   </span>
                 </div>
@@ -220,9 +283,16 @@ export default function ReportsPage() {
                       {item.count} sedute
                     </p>
                   </div>
-                  <p className="font-semibold tabular-nums text-foreground flex-shrink-0 ml-2">
-                    € {eur(item.income)}
-                  </p>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="font-semibold tabular-nums text-foreground">
+                      € {eur(item.income)}
+                    </p>
+                    {item.type === 'private' && (
+                      <p className="text-2xs tabular-nums text-success">
+                        netto € {eur(item.netIncome)}
+                      </p>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

@@ -49,10 +49,18 @@ export interface ReportData {
   }>
 }
 
-/** Center share (0-100) of the service type linked to a payment via its session, if any. */
-const centerPctOfPayment = (p: {
-  sessions?: { service_types?: { center_percentage?: number | null } | null } | null
-}): number => p.sessions?.service_types?.center_percentage ?? 0
+/**
+ * Center share (0-100) of the service type linked to a payment via its session, if any.
+ * Defensive about shape: depending on the select string, supabase-js may type (or
+ * return) the embedded relation as a single object or as an array.
+ */
+const centerPctOfPayment = (p: any): number => {
+  const session = Array.isArray(p?.sessions) ? p.sessions[0] : p?.sessions
+  const serviceType = Array.isArray(session?.service_types)
+    ? session.service_types[0]
+    : session?.service_types
+  return serviceType?.center_percentage ?? 0
+}
 
 export const useReports = (startDate: Date, endDate: Date) => {
   const { user } = useAuth()

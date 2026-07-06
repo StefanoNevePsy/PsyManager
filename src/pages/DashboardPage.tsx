@@ -100,6 +100,7 @@ export default function DashboardPage() {
       icon: CreditCard,
       link: '/payments',
       hint: 'pagamenti registrati',
+      subValue: `≈ € ${(data?.monthNetIncome ?? 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} netti`,
     },
     {
       title: 'Proiezione anno',
@@ -159,6 +160,9 @@ export default function DashboardPage() {
                 <p className="font-display text-3xl lg:text-4xl font-semibold tracking-tight tabular-nums leading-none">
                   {stat.value}
                 </p>
+              )}
+              {'subValue' in stat && stat.subValue && !isLoading && (
+                <p className="text-xs text-success tabular-nums mt-1">{stat.subValue}</p>
               )}
               <p className="text-2xs text-muted-foreground mt-2">{stat.hint}</p>
             </Link>

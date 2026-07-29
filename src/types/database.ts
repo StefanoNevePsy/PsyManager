@@ -207,6 +207,7 @@ export interface Database {
           series_id?: string | null
           scheduled_at: string
           duration_minutes: number
+          reminder_sent_at?: string | null
           notes?: string | null
           google_calendar_event_id?: string | null
           created_at: string
@@ -237,6 +238,7 @@ export interface Database {
           series_id?: string | null
           scheduled_at?: string
           duration_minutes?: number
+          reminder_sent_at?: string | null
           notes?: string | null
           google_calendar_event_id?: string | null
           updated_at?: string
@@ -510,6 +512,9 @@ export interface Database {
           pre_session_minutes: number
           post_session_enabled: boolean
           post_session_minutes: number
+          whatsapp_enabled: boolean
+          whatsapp_template: string
+          whatsapp_notify_minutes: number
           created_at: string
           updated_at: string
         }
@@ -520,6 +525,9 @@ export interface Database {
           pre_session_minutes?: number
           post_session_enabled?: boolean
           post_session_minutes?: number
+          whatsapp_enabled?: boolean
+          whatsapp_template?: string
+          whatsapp_notify_minutes?: number
           created_at?: string
           updated_at?: string
         }
@@ -528,6 +536,9 @@ export interface Database {
           pre_session_minutes?: number
           post_session_enabled?: boolean
           post_session_minutes?: number
+          whatsapp_enabled?: boolean
+          whatsapp_template?: string
+          whatsapp_notify_minutes?: number
           updated_at?: string
         }
       }
@@ -551,6 +562,109 @@ export interface Database {
         Update: {
           title_format?: CalendarTitleFormat
           color_by_service?: boolean
+          updated_at?: string
+        }
+      }
+      receipts: {
+        Row: {
+          id: string
+          user_id: string
+          number: number
+          year: number
+          patient_id?: string | null
+          group_id?: string | null
+          recipient_name: string
+          recipient_tax_code?: string | null
+          recipient_address?: string | null
+          issue_date: string
+          description: string
+          amount: number
+          bollo_amount: number
+          payment_method?: PaymentMethod | null
+          notes?: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          number: number
+          year: number
+          patient_id?: string | null
+          group_id?: string | null
+          recipient_name: string
+          recipient_tax_code?: string | null
+          recipient_address?: string | null
+          issue_date?: string
+          description?: string
+          amount: number
+          bollo_amount?: number
+          payment_method?: PaymentMethod | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          patient_id?: string | null
+          group_id?: string | null
+          recipient_name?: string
+          recipient_tax_code?: string | null
+          recipient_address?: string | null
+          issue_date?: string
+          description?: string
+          amount?: number
+          bollo_amount?: number
+          payment_method?: PaymentMethod | null
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+      receipt_sessions: {
+        Row: { id: string; receipt_id: string; session_id: string }
+        Insert: { id?: string; receipt_id: string; session_id: string }
+        Update: { receipt_id?: string; session_id?: string }
+      }
+      receipt_settings: {
+        Row: {
+          id: string
+          user_id: string
+          professional_name: string
+          tax_code?: string | null
+          vat_number?: string | null
+          address?: string | null
+          albo_registration?: string | null
+          regime_note: string
+          exempt_note: string
+          bollo_threshold: number
+          bollo_default_amount: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          professional_name?: string
+          tax_code?: string | null
+          vat_number?: string | null
+          address?: string | null
+          albo_registration?: string | null
+          regime_note?: string
+          exempt_note?: string
+          bollo_threshold?: number
+          bollo_default_amount?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          professional_name?: string
+          tax_code?: string | null
+          vat_number?: string | null
+          address?: string | null
+          albo_registration?: string | null
+          regime_note?: string
+          exempt_note?: string
+          bollo_threshold?: number
+          bollo_default_amount?: number
           updated_at?: string
         }
       }

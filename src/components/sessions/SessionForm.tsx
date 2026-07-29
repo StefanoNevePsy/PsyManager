@@ -18,6 +18,8 @@ type Session = Database['public']['Tables']['sessions']['Row']
 interface Props {
   initialData?: Session
   defaultDate?: Date
+  /** Preselect a patient when creating from a patient's page */
+  defaultPatientId?: string
   onSubmit: (data: SessionFormData) => void | Promise<void>
   onCancel: () => void
   onDelete?: () => void
@@ -48,6 +50,7 @@ const DAYS_OF_WEEK = [
 export default function SessionForm({
   initialData,
   defaultDate,
+  defaultPatientId,
   onSubmit,
   onCancel,
   onDelete,
@@ -76,7 +79,7 @@ export default function SessionForm({
   } = useForm<SessionFormData>({
     resolver: zodResolver(sessionSchema),
     defaultValues: {
-      patient_id: initialData?.patient_id || '',
+      patient_id: initialData?.patient_id || defaultPatientId || '',
       group_id: initialData?.group_id || '',
       session_type: initialData?.session_type || 'individuale',
       status: initialData?.status || 'scheduled',

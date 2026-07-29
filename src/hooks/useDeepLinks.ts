@@ -49,8 +49,19 @@ export function useDeepLinks() {
 
     const handleNotification = (extra: unknown) => {
       if (!extra || typeof extra !== 'object') return
-      const data = extra as { sessionId?: string; kind?: 'pre' | 'post' }
+      const data = extra as {
+        sessionId?: string
+        kind?: 'pre' | 'post' | 'whatsapp'
+      }
       if (!data.sessionId) return
+
+      // 'whatsapp' nudges open the reminders screen for the session's day,
+      // where the message can be sent with one tap.
+      if (data.kind === 'whatsapp') {
+        navigate('/reminders', { state: { sessionId: data.sessionId } })
+        return
+      }
+
       const state =
         data.kind === 'post'
           ? { editSessionId: data.sessionId, openPayment: true }

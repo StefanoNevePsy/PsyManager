@@ -59,6 +59,8 @@ export default function SessionsPage() {
   const [pendingEditId, setPendingEditId] = useState<string | null>(null)
   // Edits to a recurring session wait here while the user picks the scope
   const [pendingScopedData, setPendingScopedData] = useState<SessionFormData | null>(null)
+  // Patient preselected when arriving from a patient's page
+  const [prefillPatientId, setPrefillPatientId] = useState<string | undefined>()
 
   const [pendingOpenPayment, setPendingOpenPayment] = useState(false)
 
@@ -72,6 +74,7 @@ export default function SessionsPage() {
           editSessionId?: string
           editSessionDate?: string
           openPayment?: boolean
+          newSessionPatientId?: string
         }
       | null
     if (state?.editSessionId) {
@@ -81,6 +84,13 @@ export default function SessionsPage() {
       setPendingEditId(state.editSessionId)
       if (state.openPayment) setPendingOpenPayment(true)
       // Clear navigation state so navigating back doesn't reopen the modal
+      window.history.replaceState({}, '')
+    } else if (state?.newSessionPatientId) {
+      // Coming from a patient's page: open a prefilled new-session form
+      setPrefillPatientId(state.newSessionPatientId)
+      setEditing(null)
+      setDefaultDate(undefined)
+      setModalOpen(true)
       window.history.replaceState({}, '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,6 +169,7 @@ export default function SessionsPage() {
     useGoogleCalendarSync()
 
   const openCreateModal = (date?: Date) => {
+    setPrefillPatientId(undefined)
     // Clicking a day in the month view yields local midnight — default to a
     // sensible working hour instead of 00:00
     let d = date
@@ -503,6 +514,7 @@ export default function SessionsPage() {
         <SessionForm
           initialData={editing || undefined}
           defaultDate={defaultDate}
+          defaultPatientId={prefillPatientId}
           onSubmit={handleSubmit}
           onCancel={() => {
             setModalOpen(false)

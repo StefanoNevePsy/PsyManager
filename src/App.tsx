@@ -26,6 +26,9 @@ import SettingsPage from '@/pages/SettingsPage'
 import ServiceTypesPage from '@/pages/ServiceTypesPage'
 import StructuresPage from '@/pages/StructuresPage'
 import ClinicalNotesPage from '@/pages/ClinicalNotesPage'
+import PatientDetailPage from '@/pages/PatientDetailPage'
+import RemindersPage from '@/pages/RemindersPage'
+import AppLock from '@/components/AppLock'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -81,8 +84,10 @@ function AppRoutes() {
       >
         <Route path="/" element={<DashboardPage />} />
         <Route path="/patients" element={<PatientsPage />} />
+        <Route path="/patients/:id" element={<PatientDetailPage />} />
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/clinical-notes" element={<ClinicalNotesPage />} />
+        <Route path="/reminders" element={<RemindersPage />} />
         <Route path="/service-types" element={<ServiceTypesPage />} />
         <Route path="/structures" element={<StructuresPage />} />
         <Route path="/payments" element={<PaymentsPage />} />
@@ -113,6 +118,7 @@ function App() {
       persistOptions={{ persister }}
     >
       <ToastProvider>
+        <AppLock />
         <PWAUpdatePrompt />
         <Router basename={basename}>
           <AppRoutes />

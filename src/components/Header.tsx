@@ -1,10 +1,15 @@
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/hooks/useAuth'
-import { Moon, Sun, LogOut, Settings, User, Menu } from 'lucide-react'
+import { Moon, Sun, LogOut, Settings, User, Menu, Search } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Tooltip } from '@/components/ui'
 import SyncStatusIndicator from '@/components/SyncStatusIndicator'
+import CommandPalette, { OPEN_COMMAND_PALETTE_EVENT } from '@/components/CommandPalette'
+
+/** True on macOS/iOS so the shortcut hint reads "⌘K" instead of "Ctrl K". */
+const isAppleDevice =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform ?? navigator.userAgent)
 
 interface Props {
   onMenuClick?: () => void
@@ -59,6 +64,27 @@ export default function Header({ onMenuClick }: Props) {
       </div>
 
       <div className="flex items-center gap-1">
+        <Tooltip label="Cerca (Ctrl+K)" side="bottom">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent(OPEN_COMMAND_PALETTE_EVENT))}
+            aria-label="Cerca"
+            className="hidden sm:inline-flex h-9 items-center gap-2 pl-3 pr-2 rounded-md border border-border bg-secondary/40 hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <Search className="w-[15px] h-[15px]" strokeWidth={1.85} />
+            <span className="text-sm">Cerca...</span>
+            <kbd className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded border border-border/80 bg-card text-2xs font-medium">
+              {isAppleDevice ? '⌘K' : 'Ctrl K'}
+            </kbd>
+          </button>
+        </Tooltip>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_COMMAND_PALETTE_EVENT))}
+          aria-label="Cerca"
+          className="sm:hidden h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
+        >
+          <Search className="w-[18px] h-[18px]" strokeWidth={1.85} />
+        </button>
+
         <SyncStatusIndicator />
 
         <Tooltip
@@ -134,6 +160,8 @@ export default function Header({ onMenuClick }: Props) {
           )}
         </div>
       </div>
+
+      <CommandPalette />
     </header>
   )
 }

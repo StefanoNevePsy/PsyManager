@@ -28,6 +28,7 @@ const hashId = (s: string): number => {
 
 const preNotificationId = (sessionId: string) => hashId(`pre:${sessionId}`)
 const postNotificationId = (sessionId: string) => hashId(`post:${sessionId}`)
+const whatsappNotificationId = (sessionId: string) => hashId(`wa:${sessionId}`)
 
 interface PendingReminder {
   id: number
@@ -35,7 +36,7 @@ interface PendingReminder {
   body: string
   at: Date
   sessionId: string
-  kind: 'pre' | 'post'
+  kind: 'pre' | 'post' | 'whatsapp'
 }
 
 const buildPendingReminders = (
@@ -90,6 +91,22 @@ const buildPendingReminders = (
         })
       }
     }
+
+    // Nudge to send the WhatsApp appointment reminder, only while it hasn't
+    // been marked as sent yet.
+    if (settings.whatsapp_enabled && !s.reminder_sent_at) {
+      const triggerAt = start - settings.whatsapp_notify_minutes * 60_000
+      if (triggerAt > now && triggerAt < horizon) {
+        reminders.push({
+          id: whatsappNotificationId(s.id),
+          title: 'Promemoria da inviare',
+          body: `${patient} · ${formatTime(start)}`,
+          at: new Date(triggerAt),
+          sessionId: s.id,
+          kind: 'whatsapp',
+        })
+      }
+    }
   }
 
   // Sort by trigger time and cap to MAX_NOTIFICATIONS
@@ -129,10 +146,12 @@ export const syncReminders = async (
 ) => {
   if (!isSupported()) return
 
-  // No settings yet, or both reminders disabled → cancel all of ours
+  // No settings yet, or every reminder kind disabled → cancel all of ours
   const allDisabled =
     !settings ||
-    (!settings.pre_session_enabled && !settings.post_session_enabled)
+    (!settings.pre_session_enabled &&
+      !settings.post_session_enabled &&
+      !settings.whatsapp_enabled)
 
   let pending: { notifications: { id: number }[] }
   try {

@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit, Trash2, Mail, Phone, Users, Heart, Home, Tag, Pencil } from 'lucide-react'
 import {
   usePatients,
@@ -42,6 +43,8 @@ type Patient = Database['public']['Tables']['patients']['Row']
 
 export default function PatientsPage() {
   const { toast } = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
@@ -69,6 +72,21 @@ export default function PatientsPage() {
   const createGroupMutation = useCreatePatientGroup()
   const updateGroupMutation = useUpdatePatientGroup()
   const deleteGroupMutation = useDeletePatientGroup()
+
+  // Handle navigation from the patient detail page ("Modifica"): open the
+  // edit modal for the requested patient once the list has loaded, then
+  // clear the state so navigating back doesn't reopen the modal.
+  useEffect(() => {
+    const state = location.state as { editPatientId?: string } | null
+    if (!state?.editPatientId || isLoading) return
+    const target = patients.find((p) => p.id === state.editPatientId)
+    if (target) {
+      setEditingPatient(target)
+      setModalOpen(true)
+      window.history.replaceState({}, '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, patients, isLoading])
 
   // Tag hooks
   const { tags, createTag, updateTag, deleteTag, isCreating: isCreatingTag, isUpdating: isUpdatingTag, isDeleting: isDeletingTag } = usePatientTags()
@@ -375,7 +393,8 @@ export default function PatientsPage() {
                     return (
                     <tr
                       key={patient.id}
-                      className="text-foreground hover:bg-secondary/40 transition-colors"
+                      onClick={() => navigate(`/patients/${patient.id}`)}
+                      className="text-foreground hover:bg-secondary/40 transition-colors cursor-pointer"
                     >
                       <td className="py-3 px-5 font-medium">
                         <div className="flex items-center gap-2">
@@ -463,7 +482,8 @@ export default function PatientsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-5 w-5"
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation()
                                   setAssignmentPatient(patient)
                                   setTagAssignmentOpen(true)
                                 }}
@@ -477,7 +497,8 @@ export default function PatientsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 setAssignmentPatient(patient)
                                 setTagAssignmentOpen(true)
                               }}
@@ -494,7 +515,10 @@ export default function PatientsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => openEditModal(patient)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditModal(patient)
+                              }}
                               aria-label={`Modifica ${patient.first_name} ${patient.last_name}`}
                             >
                               <Edit className="w-4 h-4" strokeWidth={1.85} />
@@ -504,7 +528,10 @@ export default function PatientsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => setDeletingPatient(patient)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeletingPatient(patient)
+                              }}
                               aria-label={`Elimina ${patient.first_name} ${patient.last_name}`}
                             >
                               <Trash2 className="w-4 h-4 text-destructive" strokeWidth={1.85} />
@@ -522,7 +549,11 @@ export default function PatientsPage() {
             {/* Mobile view */}
             <ul className="md:hidden divide-y divide-border">
               {filteredPatients.map((patient) => (
-                <li key={patient.id} className="p-4 space-y-2">
+                <li
+                  key={patient.id}
+                  onClick={() => navigate(`/patients/${patient.id}`)}
+                  className="p-4 space-y-2 cursor-pointer hover:bg-secondary/40 transition-colors"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-semibold text-foreground">
                       {patient.last_name} {patient.first_name}
@@ -531,7 +562,10 @@ export default function PatientsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => openEditModal(patient)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEditModal(patient)
+                        }}
                         aria-label={`Modifica ${patient.first_name} ${patient.last_name}`}
                       >
                         <Edit className="w-4 h-4" strokeWidth={1.85} />
@@ -539,7 +573,10 @@ export default function PatientsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setDeletingPatient(patient)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setDeletingPatient(patient)
+                        }}
                         aria-label={`Elimina ${patient.first_name} ${patient.last_name}`}
                       >
                         <Trash2 className="w-4 h-4 text-destructive" strokeWidth={1.85} />
@@ -595,7 +632,8 @@ export default function PatientsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setAssignmentPatient(patient)
                         setTagAssignmentOpen(true)
                       }}

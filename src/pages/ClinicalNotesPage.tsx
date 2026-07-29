@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { BookOpen, Plus, Pencil, Trash2, Search, Filter } from 'lucide-react'
@@ -29,6 +30,8 @@ import { patientFullName } from '@/lib/sessionDisplay'
 
 export default function ClinicalNotesPage() {
   const { toast } = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
   const { data: notes = [], isLoading } = useClinicalNotes()
   const { data: patients = [] } = usePatients()
   const createMutation = useCreateClinicalNote()
@@ -39,7 +42,37 @@ export default function ClinicalNotesPage() {
   const [patientFilter, setPatientFilter] = useState('')
   const [editing, setEditing] = useState<ClinicalNoteWithRelations | null>(null)
   const [creating, setCreating] = useState(false)
+  const [createDefaultPatientId, setCreateDefaultPatientId] = useState<string | undefined>()
   const [deleteTarget, setDeleteTarget] = useState<ClinicalNoteWithRelations | null>(null)
+  const [pendingOpenNoteId, setPendingOpenNoteId] = useState<string | null>(null)
+
+  // Handle navigation from the patient detail page or sessions page:
+  // - newNotePatientId: open the create modal prefilled with that patient
+  // - openNoteId: open that note's edit modal once notes have loaded
+  useEffect(() => {
+    const state = location.state as
+      | { newNotePatientId?: string; openNoteId?: string }
+      | null
+    if (state?.newNotePatientId) {
+      setCreateDefaultPatientId(state.newNotePatientId)
+      setCreating(true)
+      window.history.replaceState({}, '')
+    } else if (state?.openNoteId) {
+      setPendingOpenNoteId(state.openNoteId)
+      window.history.replaceState({}, '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!pendingOpenNoteId || isLoading) return
+    const note = notes.find((n) => n.id === pendingOpenNoteId)
+    if (note) {
+      setEditing(note)
+      setPendingOpenNoteId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenNoteId, notes, isLoading])
 
   const filteredNotes = useMemo(() => {
     return notes.filter((n) => {
@@ -65,6 +98,7 @@ export default function ClinicalNotesPage() {
       })
       toast.success('Nota creata')
       setCreating(false)
+      setCreateDefaultPatientId(undefined)
     } catch (error) {
       toast.error('Errore nella creazione', {
         description: error instanceof Error ? error.message : 'Riprova',
@@ -213,9 +247,16 @@ export default function ClinicalNotesPage() {
                     </h3>
                   )}
                   {note.patients && (
-                    <p className="text-sm text-muted-foreground">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/patients/${note.patient_id}`)
+                      }}
+                      className="text-sm text-muted-foreground hover:text-primary hover:underline transition-colors"
+                    >
                       {patientFullName(note.patients)}
-                    </p>
+                    </button>
                   )}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -264,13 +305,20 @@ export default function ClinicalNotesPage() {
       {/* Create modal */}
       <Modal
         isOpen={creating}
-        onClose={() => setCreating(false)}
+        onClose={() => {
+          setCreating(false)
+          setCreateDefaultPatientId(undefined)
+        }}
         title="Nuova nota clinica"
         size="lg"
       >
         <ClinicalNoteForm
+          defaultPatientId={createDefaultPatientId}
           onSubmit={handleCreate}
-          onCancel={() => setCreating(false)}
+          onCancel={() => {
+            setCreating(false)
+            setCreateDefaultPatientId(undefined)
+          }}
           loading={createMutation.isPending}
         />
       </Modal>

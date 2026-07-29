@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
 import { Database } from '@/types/database'
+import { DEFAULT_WHATSAPP_TEMPLATE } from '@/lib/whatsapp'
 
 export type ReminderSettings =
   Database['public']['Tables']['reminder_settings']['Row']
@@ -11,6 +12,9 @@ export const DEFAULT_REMINDER_SETTINGS = {
   pre_session_minutes: 30,
   post_session_enabled: false,
   post_session_minutes: 30,
+  whatsapp_enabled: false,
+  whatsapp_template: DEFAULT_WHATSAPP_TEMPLATE,
+  whatsapp_notify_minutes: 1440,
 }
 
 export const useReminderSettings = () => {

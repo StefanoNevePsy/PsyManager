@@ -12,6 +12,8 @@ import { useTaxSettings, useUpdateTaxSettings } from '@/hooks/useTaxSettings'
 import { DEFAULT_TAX_SETTINGS, effectiveTaxRate } from '@/lib/netIncome'
 import { ensureNotificationPermission } from '@/lib/reminders'
 import { Button, Card, Input, Select, PageHeader, useToast } from '@/components/ui'
+import WhatsAppSettings from '@/components/settings/WhatsAppSettings'
+import AppLockSettings from '@/components/settings/AppLockSettings'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -352,6 +354,12 @@ export default function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      {/* WhatsApp patient reminders */}
+      <WhatsAppSettings />
+
+      {/* Device PIN lock */}
+      <AppLockSettings />
 
       {/* Tax regime / net income estimate */}
       <Card>

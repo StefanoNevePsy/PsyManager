@@ -214,7 +214,8 @@ export default function DashboardPage() {
                 return (
                   <li
                     key={session.id}
-                    className={`flex items-center gap-3 px-5 py-3 hover:bg-secondary/30 transition-colors ${
+                    onClick={() => handleSessionClick(session)}
+                    className={`flex items-center gap-3 px-5 py-3 hover:bg-secondary/40 transition-colors cursor-pointer ${
                       session.isPast ? 'opacity-60' : ''
                     } ${isFirstFuture ? 'bg-primary-soft/30' : ''}`}
                   >
@@ -288,7 +289,8 @@ export default function DashboardPage() {
               {data?.recentPayments.map((payment) => (
                 <li
                   key={payment.id}
-                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-secondary/30 transition-colors"
+                  onClick={() => navigate('/payments')}
+                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-secondary/40 transition-colors cursor-pointer"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground truncate">
@@ -355,7 +357,8 @@ export default function DashboardPage() {
                   return (
                     <li
                       key={p.patientId}
-                      className={`flex items-center gap-3 px-5 py-3 transition-colors hover:bg-secondary/30 ${
+                      onClick={() => navigate(`/patients/${p.patientId}`)}
+                      className={`flex items-center gap-3 px-5 py-3 transition-colors hover:bg-secondary/40 cursor-pointer ${
                         hasToday ? 'bg-primary-soft/20' : ''
                       }`}
                     >

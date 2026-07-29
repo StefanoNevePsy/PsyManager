@@ -28,6 +28,7 @@ import StructuresPage from '@/pages/StructuresPage'
 import ClinicalNotesPage from '@/pages/ClinicalNotesPage'
 import PatientDetailPage from '@/pages/PatientDetailPage'
 import RemindersPage from '@/pages/RemindersPage'
+import ReceiptsPage from '@/pages/ReceiptsPage'
 import AppLock from '@/components/AppLock'
 
 const queryClient = new QueryClient({
@@ -88,6 +89,7 @@ function AppRoutes() {
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/clinical-notes" element={<ClinicalNotesPage />} />
         <Route path="/reminders" element={<RemindersPage />} />
+        <Route path="/receipts" element={<ReceiptsPage />} />
         <Route path="/service-types" element={<ServiceTypesPage />} />
         <Route path="/structures" element={<StructuresPage />} />
         <Route path="/payments" element={<PaymentsPage />} />

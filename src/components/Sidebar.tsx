@@ -9,6 +9,7 @@ import {
   Building2,
   BookOpen,
   MessageCircle,
+  Receipt,
   Settings,
   X,
   type LucideIcon,
@@ -31,6 +32,7 @@ const navigationItems: NavItem[] = [
   { label: 'Pagamenti', path: '/payments', icon: CreditCard, group: 'main' },
   { label: 'Tipi prestazione', path: '/service-types', icon: Briefcase, group: 'manage' },
   { label: 'Strutture', path: '/structures', icon: Building2, group: 'manage' },
+  { label: 'Ricevute', path: '/receipts', icon: Receipt, group: 'manage' },
   { label: 'Report', path: '/reports', icon: BarChart3, group: 'manage' },
   { label: 'Impostazioni', path: '/settings', icon: Settings, group: 'system' },
 ]

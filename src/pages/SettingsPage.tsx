@@ -14,6 +14,7 @@ import { ensureNotificationPermission } from '@/lib/reminders'
 import { Button, Card, Input, Select, PageHeader, useToast } from '@/components/ui'
 import WhatsAppSettings from '@/components/settings/WhatsAppSettings'
 import AppLockSettings from '@/components/settings/AppLockSettings'
+import ReceiptSettings from '@/components/settings/ReceiptSettings'
 
 export default function SettingsPage() {
   const { user } = useAuth()
@@ -357,6 +358,9 @@ export default function SettingsPage() {
 
       {/* WhatsApp patient reminders */}
       <WhatsAppSettings />
+
+      {/* Receipt header and numbering */}
+      <ReceiptSettings />
 
       {/* Device PIN lock */}
       <AppLockSettings />

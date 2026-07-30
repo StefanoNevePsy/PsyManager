@@ -72,7 +72,7 @@ jobs:
           echo "package_version=$PKG_VERSION"   >> "$GITHUB_OUTPUT"
           echo "version_code=$COMMIT_COUNT"     >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME"     >> "$GITHUB_OUTPUT"
-          echo "tag=android-v$VERSION_NAME"     >> "$GITHUB_OUTPUT"
+          echo "tag=android-v$VERSION_NAME-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           SHORT_SHA=$(git rev-parse --short HEAD)
           REF_NAME="${GITHUB_REF_NAME}"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
@@ -309,6 +309,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        id: release
         if: ${{ github.event_name == 'push' || inputs.release == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
@@ -318,6 +319,22 @@ jobs:
           files: ${{ steps.apk.outputs.path }}
           draft: false
           prerelease: false
+          make_latest: true
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Print exactly where the APK just built can be downloaded, so there is
+      # no way to end up installing an older release by mistake.
+      - name: Report download link
+        if: ${{ github.event_name == 'push' || inputs.release == 'true' }}
+        run: |
+          URL="${{ steps.release.outputs.url }}"
+          {
+            echo "### APK pronto"
+            echo ""
+            echo "- **File:** \`${{ steps.apk.outputs.path }}\`"
+            echo "- **Tag:** \`${{ steps.version.outputs.tag }}\`"
+            echo "- **Release:** $URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Release: $URL"

@@ -12,6 +12,7 @@ import {
   format,
 } from 'date-fns'
 import { patientFullName, sessionDisplayName, isBillableStatus } from '@/lib/sessionDisplay'
+import { SessionStatus } from '@/types/database'
 import { computeNet, DEFAULT_TAX_SETTINGS, TaxParams } from '@/lib/netIncome'
 
 export interface PatientBalanceLite {
@@ -36,6 +37,7 @@ export interface DashboardStats {
     patientId: string
     patientName: string
     serviceName: string
+    status: SessionStatus
     isPast: boolean
     patientBalance: number
   }>
@@ -251,6 +253,7 @@ export const useDashboardStats = () => {
           patientId: entityId,
           patientName: sessionDisplayName(s),
           serviceName: s.service_types?.name || '-',
+          status: (s.status ?? 'scheduled') as SessionStatus,
           isPast: scheduledMs < nowMs,
           patientBalance: getBalance(entityId),
         }

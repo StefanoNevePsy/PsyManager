@@ -18,6 +18,7 @@ import { useDashboardStats } from '@/hooks/useDashboardStats'
 import { useAuth } from '@/hooks/useAuth'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { Button, Card, EmptyState, Skeleton } from '@/components/ui'
+import SessionStatusControl from '@/components/sessions/SessionStatusControl'
 import { useSessions } from '@/hooks/useSessions'
 import WeeklyCalendarView from '@/components/sessions/WeeklyCalendarView'
 
@@ -244,6 +245,11 @@ export default function DashboardPage() {
                         {session.serviceName}
                       </p>
                     </div>
+                    <SessionStatusControl
+                      sessionId={session.id}
+                      status={session.status}
+                      compact
+                    />
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-semibold tabular-nums text-foreground">
                         {format(new Date(session.scheduled_at), 'HH:mm')}

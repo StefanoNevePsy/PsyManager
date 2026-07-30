@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
 import { format, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -8,19 +7,14 @@ import {
   Trash2,
   Calendar,
   DollarSign,
-  CalendarClock,
-  CheckCircle2,
-  XCircle,
-  UserX,
-  type LucideIcon,
 } from 'lucide-react'
-import { Button, EmptyState, Tooltip, useToast } from '@/components/ui'
-import { SessionWithRelations, useUpdateSessionStatus } from '@/hooks/useSessions'
+import { Button, EmptyState, Tooltip } from '@/components/ui'
+import { SessionWithRelations } from '@/hooks/useSessions'
 import { getServiceColor } from '@/lib/serviceColors'
 import { usePatientBalanceMap } from '@/hooks/usePayments'
 import { sessionDisplayName, SESSION_STATUS_LABELS } from '@/lib/sessionDisplay'
-import { SessionStatus } from '@/types/database'
 import BalanceDot from '@/components/payments/BalanceDot'
+import SessionStatusControl from '@/components/sessions/SessionStatusControl'
 
 interface Props {
   sessions: SessionWithRelations[]
@@ -29,107 +23,6 @@ interface Props {
   onPay?: (session: SessionWithRelations) => void
   emptyTitle?: string
   emptyDescription?: string
-}
-
-// Icon + look for each status, used by the one-tap status control below.
-// 'scheduled' reads as a neutral "still to do" rather than an explicit label.
-const STATUS_META: Record<SessionStatus, { label: string; icon: LucideIcon; className: string }> = {
-  scheduled: {
-    label: 'Da svolgere',
-    icon: CalendarClock,
-    className: 'text-muted-foreground bg-secondary/60 border-border',
-  },
-  completed: {
-    label: SESSION_STATUS_LABELS.completed,
-    icon: CheckCircle2,
-    className: 'text-success bg-success-soft border-success/30',
-  },
-  cancelled: {
-    label: SESSION_STATUS_LABELS.cancelled,
-    icon: XCircle,
-    className: 'text-destructive bg-destructive-soft border-destructive/30',
-  },
-  no_show: {
-    label: SESSION_STATUS_LABELS.no_show,
-    icon: UserX,
-    className: 'text-warning bg-warning-soft border-warning/30',
-  },
-}
-
-const STATUS_OPTIONS = Object.keys(STATUS_META) as SessionStatus[]
-
-/** Compact popover button to change a session's status in one tap. */
-function SessionStatusControl({ session }: { session: SessionWithRelations }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const updateStatus = useUpdateSessionStatus()
-  const { toast } = useToast()
-
-  useEffect(() => {
-    if (!isMenuOpen) return
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isMenuOpen])
-
-  const isPending =
-    updateStatus.isPending && updateStatus.variables?.id === session.id
-
-  const handleSelect = async (status: SessionStatus) => {
-    setIsMenuOpen(false)
-    if (status === session.status) return
-    try {
-      await updateStatus.mutateAsync({ id: session.id, status })
-      toast.success(`Stato aggiornato a "${STATUS_META[status].label}"`)
-    } catch {
-      toast.error('Errore durante l\'aggiornamento dello stato')
-    }
-  }
-
-  const meta = STATUS_META[session.status]
-  const Icon = meta.icon
-
-  return (
-    <div className="relative flex-shrink-0" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setIsMenuOpen((v) => !v)}
-        disabled={isPending}
-        aria-haspopup="true"
-        aria-expanded={isMenuOpen}
-        className={`inline-flex items-center gap-1.5 text-2xs font-semibold px-2 py-1 rounded-full border transition-colors disabled:opacity-50 disabled:cursor-wait ${meta.className}`}
-      >
-        <Icon className="w-3.5 h-3.5" strokeWidth={2} />
-        {meta.label}
-      </button>
-      {isMenuOpen && (
-        <div className="absolute right-0 z-20 mt-1 w-40 bg-popover border border-border rounded-lg shadow-pop overflow-hidden animate-scale-in origin-top-right">
-          {STATUS_OPTIONS.map((statusOption) => {
-            const optionMeta = STATUS_META[statusOption]
-            const OptionIcon = optionMeta.icon
-            const selected = statusOption === session.status
-            return (
-              <button
-                key={statusOption}
-                type="button"
-                onClick={() => handleSelect(statusOption)}
-                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-secondary transition-colors ${
-                  selected ? 'font-semibold text-foreground' : 'text-popover-foreground'
-                }`}
-              >
-                <OptionIcon className="w-4 h-4 flex-shrink-0" strokeWidth={1.85} />
-                {optionMeta.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
 }
 
 export default function SessionsList({
@@ -246,7 +139,7 @@ export default function SessionsList({
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <SessionStatusControl session={session} />
+                      <SessionStatusControl sessionId={session.id} status={session.status} />
                       {onPay && session.service_types?.type === 'private' && (
                         <Tooltip label="Registra pagamento">
                           <Button

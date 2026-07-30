@@ -221,6 +221,41 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           echo "✓ APK signature verified"
 
+      # Facts about the produced package: which signature schemes are present
+      # (Android 11+ REQUIRES v2+ when targetSdk >= 30) and whether the
+      # manifest parses at all, which is what "invalid package" really means.
+      - name: Inspect APK (signature schemes, sdk levels, icon)
+        env:
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          BT=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -n 1)
+          echo "=== apksigner: signature schemes ==="
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/sig.txt
+
+          echo ""
+          echo "=== Verified schemes ==="
+          for scheme in "v1 scheme (JAR signing)" "v2 scheme (APK Signature Scheme v2)" "v3 scheme (APK Signature Scheme v3)"; do
+            grep -i "Verified using $scheme" /tmp/sig.txt || true
+          done
+
+          # Android 11+ refuses to install a v1-only package when targetSdk>=30
+          if grep -qi "Verified using v1 scheme.*true" /tmp/sig.txt \
+             && ! grep -qi "Verified using v2 scheme.*true" /tmp/sig.txt; then
+            echo "::error::APK is signed with the v1 scheme only. Android 11+ rejects this as an invalid package."
+            exit 1
+          fi
+
+          echo ""
+          echo "=== aapt2 badging (manifest must parse) ==="
+          "$BT/aapt2" dump badging "$APK" > /tmp/badging.txt
+          grep -E "^package:|^sdkVersion:|^targetSdkVersion:|^application:|^application-icon|^launchable-activity:|native-code" /tmp/badging.txt || true
+
+          echo ""
+          echo "=== zip integrity ==="
+          unzip -t "$APK" > /dev/null && echo "✓ archive is intact"
+          echo "sha256: $(sha256sum "$APK" | cut -d' ' -f1)"
+          echo "size:   $(stat -c%s "$APK") bytes"
+
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:

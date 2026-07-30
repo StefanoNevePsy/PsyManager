@@ -73,9 +73,26 @@ jobs:
           echo "version_code=$COMMIT_COUNT"     >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME"     >> "$GITHUB_OUTPUT"
           echo "tag=android-v$VERSION_NAME"     >> "$GITHUB_OUTPUT"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          REF_NAME="${GITHUB_REF_NAME}"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "ref_name=$REF_NAME"   >> "$GITHUB_OUTPUT"
           echo ""
-          echo "versionCode = $COMMIT_COUNT"
-          echo "versionName = $VERSION_NAME"
+          echo "=========================================="
+          echo " Branch:      $REF_NAME"
+          echo " Commit:      $SHORT_SHA"
+          echo " versionCode: $COMMIT_COUNT"
+          echo " versionName: $VERSION_NAME"
+          echo "=========================================="
+          {
+            echo "### Build"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Branch | \`$REF_NAME\` |"
+            echo "| Commit | \`$SHORT_SHA\` |"
+            echo "| versionName | \`$VERSION_NAME\` |"
+            echo "| versionCode | \`$COMMIT_COUNT\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build web bundle
         env:
@@ -275,6 +292,7 @@ jobs:
             echo 'notes<<RELEASEEOF'
             echo "## PsyManager Android · ${{ steps.version.outputs.version_name }}"
             echo ""
+            echo "**Branch:** \`${{ steps.version.outputs.ref_name }}\`"
             echo "**versionCode:** \`${{ steps.version.outputs.version_code }}\`"
             echo "**versionName:** \`${{ steps.version.outputs.version_name }}\`"
             echo "**Commit:** ${{ github.sha }}"
@@ -295,7 +313,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: PsyManager Android ${{ steps.version.outputs.version_name }}
+          name: PsyManager Android ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.ref_name }} · ${{ steps.version.outputs.short_sha }})
           body: ${{ steps.notes.outputs.notes }}
           files: ${{ steps.apk.outputs.path }}
           draft: false

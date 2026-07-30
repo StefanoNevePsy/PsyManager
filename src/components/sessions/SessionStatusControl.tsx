@@ -43,7 +43,8 @@ const STATUS_OPTIONS = Object.keys(STATUS_META) as SessionStatus[]
 
 interface Props {
   sessionId: string
-  status: SessionStatus
+  /** May be missing on data restored from an older persisted cache */
+  status: SessionStatus | null | undefined
   /** Hide the label and show only the icon (tight rows) */
   compact?: boolean
   /** Where the menu opens from — use 'left' inside right-aligned rows */
@@ -77,6 +78,10 @@ export default function SessionStatusControl({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isMenuOpen])
 
+  // Data restored from a cache written before the status column existed has
+  // no status: fall back instead of crashing the whole tree.
+  const currentStatus: SessionStatus = status ?? 'scheduled'
+
   const isPending = updateStatus.isPending && updateStatus.variables?.id === sessionId
 
   const handleSelect = async (
@@ -85,7 +90,7 @@ export default function SessionStatusControl({
   ) => {
     event.stopPropagation()
     setIsMenuOpen(false)
-    if (nextStatus === status) return
+    if (nextStatus === currentStatus) return
     try {
       await updateStatus.mutateAsync({ id: sessionId, status: nextStatus })
       toast.success(`Stato aggiornato a "${STATUS_META[nextStatus].label}"`)
@@ -94,7 +99,7 @@ export default function SessionStatusControl({
     }
   }
 
-  const meta = STATUS_META[status]
+  const meta = STATUS_META[currentStatus] ?? STATUS_META.scheduled
   const Icon = meta.icon
 
   return (
@@ -124,7 +129,7 @@ export default function SessionStatusControl({
           {STATUS_OPTIONS.map((option) => {
             const optionMeta = STATUS_META[option]
             const OptionIcon = optionMeta.icon
-            const selected = option === status
+            const selected = option === currentStatus
             return (
               <button
                 key={option}

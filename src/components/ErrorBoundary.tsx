@@ -36,7 +36,9 @@ export default class ErrorBoundary extends Component<Props, State> {
   private handleReset = () => {
     // Most boot failures come from stale persisted state after an update
     try {
-      localStorage.removeItem('psymanager-query-cache-v2')
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('psymanager-query-cache')) localStorage.removeItem(key)
+      }
     } catch {
       // ignore
     }

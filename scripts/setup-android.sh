@@ -104,8 +104,10 @@ generate_png "$ICON_SVG" "$ANDROID_RES/drawable-nodpi/splash.png" 1200 || true
 echo "  - Generating notification icon from foreground SVG"
 for dir in "${!DENSITIES[@]}"; do
     size="${DENSITIES[$dir]}"
-    mkdir -p "$ANDROID_RES/$dir"
-    generate_png "$ICON_FOREGROUND_SVG" "$ANDROID_RES/$dir/ic_notification.png" "$size" || true
+    # smallIcon is looked up as a DRAWABLE, so mipmap-* would not be found
+    drawable_dir="${dir/mipmap-/drawable-}"
+    mkdir -p "$ANDROID_RES/$drawable_dir"
+    generate_png "$ICON_FOREGROUND_SVG" "$ANDROID_RES/$drawable_dir/ic_notification.png" "$size"
 done
 
 # ---------------------------------------------------------------------------
@@ -327,5 +329,45 @@ if 'SessionsWidgetProvider' not in content:
 
 manifest_path.write_text(content)
 PYEOF
+
+# ---------------------------------------------------------------------------
+# 7) Verify the resources actually landed. A silently icon-less build is worse
+#    than a failed one.
+# ---------------------------------------------------------------------------
+echo "  - Verifying generated resources"
+
+REQUIRED_FILES=(
+    "$ANDROID_RES/mipmap-anydpi-v26/ic_launcher.xml"
+    "$ANDROID_RES/mipmap-anydpi-v26/ic_launcher_round.xml"
+    "$ANDROID_RES/drawable/ic_launcher_background.xml"
+    "$ANDROID_RES/drawable/ic_launcher_foreground.xml"
+    "$ANDROID_RES/drawable/ic_launcher_monochrome.xml"
+    "$ANDROID_RES/values/ic_launcher_background.xml"
+    "$ANDROID_RES/drawable/splash.png"
+    "$ANDROID_RES/layout/widget_sessions.xml"
+    "$ANDROID_RES/xml/widget_sessions_info.xml"
+)
+for dir in "${!DENSITIES[@]}"; do
+    REQUIRED_FILES+=("$ANDROID_RES/$dir/ic_launcher.png")
+    REQUIRED_FILES+=("$ANDROID_RES/${dir/mipmap-/drawable-}/ic_notification.png")
+done
+
+MISSING=0
+for f in "${REQUIRED_FILES[@]}"; do
+    if [ ! -s "$f" ]; then
+        echo "    MISSING or empty: $f" >&2
+        MISSING=1
+    fi
+done
+if [ "$MISSING" -ne 0 ]; then
+    echo "Error: some Android resources were not generated. Aborting so the build fails visibly." >&2
+    exit 1
+fi
+echo "    all ${#REQUIRED_FILES[@]} expected resources present"
+
+# The launcher icon must actually be referenced by the manifest
+if ! grep -q 'android:icon="@mipmap/ic_launcher"' "$MANIFEST"; then
+    echo "Warning: AndroidManifest does not reference @mipmap/ic_launcher" >&2
+fi
 
 echo "==> Android setup complete."

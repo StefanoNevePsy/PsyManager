@@ -134,20 +134,16 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "path=$RUNNER_TEMP/release.keystore" >> "$GITHUB_OUTPUT"
 
+      # Append a standalone `android { }` block instead of regex-patching the
+      # existing one: Gradle merges repeated extension blocks, so this works
+      # regardless of how the Capacitor template formats build.gradle.
       - name: Configure signing in build.gradle
         if: ${{ steps.keystore_check.outputs.available == 'true' }}
-        env:
-          KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          python3 - <<'PYEOF'
-          import os, pathlib, re
-          p = pathlib.Path("android/app/build.gradle")
-          content = p.read_text()
+          cat >> android/app/build.gradle <<'GRADLEEOF'
 
-          signing_block = """
+          // --- Release signing (appended by CI) ---
+          android {
               signingConfigs {
                   release {
                       storeFile file(System.getenv("KEYSTORE_PATH"))
@@ -156,20 +152,15 @@ jobs:
                       keyPassword System.getenv("KEY_PASSWORD")
                   }
               }
-          """
-
-          if "signingConfigs" not in content:
-              content = re.sub(r'(android\s*\{\s*)', r'\1' + signing_block + '\n', content, count=1)
-
-          # Wire the release buildType to use the release signingConfig
-          content = re.sub(
-              r'(buildTypes\s*\{\s*release\s*\{)',
-              r'\1\n            signingConfig signingConfigs.release',
-              content,
-              count=1,
-          )
-          p.write_text(content)
-          PYEOF
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          GRADLEEOF
+          echo "--- tail of build.gradle ---"
+          tail -n 20 android/app/build.gradle
 
       - name: Build APK
         working-directory: android
@@ -190,21 +181,45 @@ jobs:
         id: apk
         run: |
           if [ "${{ steps.keystore_check.outputs.available }}" = "true" ]; then
-            APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+            DIR=android/app/build/outputs/apk/release
             SUFFIX=""
           else
-            APK_PATH=$(find android/app/build/outputs/apk/debug   -name "*.apk" | head -n 1)
+            DIR=android/app/build/outputs/apk/debug
             SUFFIX="-debug"
           fi
+
+          echo "APKs produced in $DIR:"
+          ls -1 "$DIR" || true
+
+          # An unsigned APK installs nowhere ("package appears invalid"), so
+          # never publish one: pick a signed APK explicitly.
+          APK_PATH=$(find "$DIR" -name "*.apk" ! -name "*unsigned*" | sort | head -n 1)
           if [ -z "$APK_PATH" ]; then
-            echo "No APK produced" >&2
+            echo "::error::No signed APK produced in $DIR. Check the signing configuration and the keystore secrets."
+            find "$DIR" -name "*.apk" -print >&2 || true
             exit 1
           fi
+
           DEST="psymanager-${{ steps.version.outputs.version_name }}${SUFFIX}.apk"
           cp "$APK_PATH" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
-          echo "Built: $DEST"
+          echo "Selected: $APK_PATH -> $DEST"
           ls -lh "$DEST"
+
+      # Hard gate: a package that fails signature verification must never be
+      # published — it is exactly what produces "pacchetto non valido".
+      - name: Verify APK signature
+        env:
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found in the Android SDK"
+            exit 1
+          fi
+          echo "Using $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "✓ APK signature verified"
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4

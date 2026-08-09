@@ -302,6 +302,16 @@ create table if not exists public.reminder_settings (
   whatsapp_template text not null default
     'Ciao {nome}, ti ricordo il nostro appuntamento di {giorno} alle {ora}. A presto!',
   whatsapp_notify_minutes integer not null default 1440,
+  -- Automatic SMS reminders (off until a provider is configured; the API key
+  -- is an Edge Function secret and is never stored here)
+  sms_enabled boolean not null default false,
+  sms_provider text not null default 'skebby',
+  sms_sender text not null default '',
+  sms_advance_minutes integer not null default 1440,
+  sms_template text not null default 'Le ricordo l''appuntamento di {giorno} alle {ora}.',
+  sms_quiet_start integer not null default 21,
+  sms_quiet_end integer not null default 8,
+  sms_rule text not null default 'all',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -367,6 +377,27 @@ create table if not exists public.receipt_sessions (
 );
 
 -- receipt_settings (professional header + numbering settings) ---------------
+-- Delivery ledger for automatic reminders. The UNIQUE(session_id, channel)
+-- constraint is what makes a double send impossible, even if two scheduled
+-- runs overlap.
+create table if not exists public.reminder_deliveries (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  session_id uuid not null references public.sessions(id) on delete cascade,
+  channel text not null check (channel in ('sms', 'email', 'whatsapp')),
+  status text not null default 'pending'
+    check (status in ('pending', 'sent', 'delivered', 'failed', 'skipped')),
+  provider_message_id text,
+  provider text,
+  recipient text,
+  error text,
+  scheduled_for timestamptz,
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (session_id, channel)
+);
+
 create table if not exists public.receipt_settings (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.users(id) on delete cascade unique,
@@ -437,7 +468,19 @@ alter table public.reminder_settings
   add column if not exists whatsapp_enabled boolean not null default false,
   add column if not exists whatsapp_template text not null default
     'Ciao {nome}, ti ricordo il nostro appuntamento di {giorno} alle {ora}. A presto!',
-  add column if not exists whatsapp_notify_minutes integer not null default 1440;
+  add column if not exists whatsapp_notify_minutes integer not null default 1440,
+  add column if not exists sms_enabled boolean not null default false,
+  add column if not exists sms_provider text not null default 'skebby',
+  add column if not exists sms_sender text not null default '',
+  add column if not exists sms_advance_minutes integer not null default 1440,
+  add column if not exists sms_template text not null default 'Le ricordo l''appuntamento di {giorno} alle {ora}.',
+  add column if not exists sms_quiet_start integer not null default 21,
+  add column if not exists sms_quiet_end integer not null default 8,
+  add column if not exists sms_rule text not null default 'all';
+
+alter table public.patients
+  add column if not exists sms_consent boolean not null default false,
+  add column if not exists sms_consent_at timestamptz;
 
 -- calendar_settings
 alter table public.calendar_settings
@@ -467,6 +510,31 @@ alter table public.clinical_notes
 alter table public.clinical_notes
   add constraint clinical_notes_session_id_fkey
   foreign key (session_id) references public.sessions(id) on delete set null;
+
+-- reminder_settings: valid quiet hours and a known SMS rule
+alter table public.reminder_settings
+  drop constraint if exists reminder_settings_sms_quiet_start_chk;
+alter table public.reminder_settings
+  add constraint reminder_settings_sms_quiet_start_chk
+  check (sms_quiet_start between 0 and 23);
+
+alter table public.reminder_settings
+  drop constraint if exists reminder_settings_sms_quiet_end_chk;
+alter table public.reminder_settings
+  add constraint reminder_settings_sms_quiet_end_chk
+  check (sms_quiet_end between 0 and 23);
+
+alter table public.reminder_settings
+  drop constraint if exists reminder_settings_sms_rule_chk;
+alter table public.reminder_settings
+  add constraint reminder_settings_sms_rule_chk
+  check (sms_rule in ('all', 'first', 'no_show', 'manual'));
+
+alter table public.reminder_settings
+  drop constraint if exists reminder_settings_sms_provider_chk;
+alter table public.reminder_settings
+  add constraint reminder_settings_sms_provider_chk
+  check (sms_provider in ('skebby', 'twilio', 'generic'));
 
 -- payments: the session link is missing on databases created before the
 -- payments table was moved after sessions — add it explicitly
@@ -566,6 +634,9 @@ create index if not exists receipts_patient_id_idx on public.receipts(patient_id
 create index if not exists receipts_issue_date_idx on public.receipts(issue_date);
 create index if not exists receipt_sessions_receipt_id_idx on public.receipt_sessions(receipt_id);
 create index if not exists receipt_sessions_session_id_idx on public.receipt_sessions(session_id);
+create index if not exists reminder_deliveries_user_id_idx on public.reminder_deliveries(user_id);
+create index if not exists reminder_deliveries_session_id_idx on public.reminder_deliveries(session_id);
+create index if not exists reminder_deliveries_status_idx on public.reminder_deliveries(status);
 create index if not exists receipt_settings_user_id_idx on public.receipt_settings(user_id);
 
 
@@ -593,6 +664,7 @@ alter table public.calendar_settings enable row level security;
 alter table public.tax_settings enable row level security;
 alter table public.receipts enable row level security;
 alter table public.receipt_sessions enable row level security;
+alter table public.reminder_deliveries enable row level security;
 alter table public.receipt_settings enable row level security;
 
 
@@ -831,6 +903,15 @@ create policy "Receipt sessions visible to receipt owner" on public.receipt_sess
   );
 
 -- receipt_settings ----------------------------------------------------------
+drop policy if exists "Reminder deliveries visible to owner" on public.reminder_deliveries;
+create policy "Reminder deliveries visible to owner" on public.reminder_deliveries
+  for all using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.sessions s where s.id = session_id and s.user_id = auth.uid())
+  );
+
 drop policy if exists "Users manage own receipt settings" on public.receipt_settings;
 create policy "Users manage own receipt settings" on public.receipt_settings
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -951,6 +1032,10 @@ create trigger tax_settings_updated_at_trigger before update on public.tax_setti
 
 drop trigger if exists receipts_updated_at_trigger on public.receipts;
 create trigger receipts_updated_at_trigger before update on public.receipts
+  for each row execute function public.update_updated_at_column();
+
+drop trigger if exists reminder_deliveries_updated_at_trigger on public.reminder_deliveries;
+create trigger reminder_deliveries_updated_at_trigger before update on public.reminder_deliveries
   for each row execute function public.update_updated_at_column();
 
 drop trigger if exists receipt_settings_updated_at_trigger on public.receipt_settings;

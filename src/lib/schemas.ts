@@ -32,6 +32,7 @@ export const patientSchema = z.object({
   notes: z.string().optional().or(z.literal('')),
   group_id: z.string().optional().or(z.literal('')),
   group_role: z.string().max(50).optional().or(z.literal('')),
+  sms_consent: z.boolean().optional(),
   contacts: z.array(patientContactSchema).optional(),
   family_members: z.array(familyMemberSchema).optional(),
 })

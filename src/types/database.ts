@@ -1,5 +1,13 @@
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
 
+export type SmsProvider = 'skebby' | 'twilio' | 'generic'
+
+export type SmsRule = 'all' | 'first' | 'no_show' | 'manual'
+
+export type DeliveryChannel = 'sms' | 'email' | 'whatsapp'
+
+export type DeliveryStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'skipped'
+
 export type CalendarTitleFormat = 'full' | 'first_initial' | 'initials'
 
 export type PaymentMethod =
@@ -104,6 +112,8 @@ export interface Database {
           notes?: string
           group_id?: string | null
           group_role?: string | null
+          sms_consent: boolean
+          sms_consent_at?: string | null
           created_at: string
           updated_at: string
         }
@@ -117,6 +127,8 @@ export interface Database {
           notes?: string
           group_id?: string | null
           group_role?: string | null
+          sms_consent?: boolean
+          sms_consent_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -128,6 +140,8 @@ export interface Database {
           notes?: string
           group_id?: string | null
           group_role?: string | null
+          sms_consent?: boolean
+          sms_consent_at?: string | null
           updated_at?: string
         }
       }
@@ -515,6 +529,14 @@ export interface Database {
           whatsapp_enabled: boolean
           whatsapp_template: string
           whatsapp_notify_minutes: number
+          sms_enabled: boolean
+          sms_provider: SmsProvider
+          sms_sender: string
+          sms_advance_minutes: number
+          sms_template: string
+          sms_quiet_start: number
+          sms_quiet_end: number
+          sms_rule: SmsRule
           created_at: string
           updated_at: string
         }
@@ -528,6 +550,14 @@ export interface Database {
           whatsapp_enabled?: boolean
           whatsapp_template?: string
           whatsapp_notify_minutes?: number
+          sms_enabled?: boolean
+          sms_provider?: SmsProvider
+          sms_sender?: string
+          sms_advance_minutes?: number
+          sms_template?: string
+          sms_quiet_start?: number
+          sms_quiet_end?: number
+          sms_rule?: SmsRule
           created_at?: string
           updated_at?: string
         }
@@ -539,6 +569,14 @@ export interface Database {
           whatsapp_enabled?: boolean
           whatsapp_template?: string
           whatsapp_notify_minutes?: number
+          sms_enabled?: boolean
+          sms_provider?: SmsProvider
+          sms_sender?: string
+          sms_advance_minutes?: number
+          sms_template?: string
+          sms_quiet_start?: number
+          sms_quiet_end?: number
+          sms_rule?: SmsRule
           updated_at?: string
         }
       }
@@ -565,6 +603,43 @@ export interface Database {
           title_format?: CalendarTitleFormat
           color_by_service?: boolean
           include_notes?: boolean
+          updated_at?: string
+        }
+      }
+      reminder_deliveries: {
+        Row: {
+          id: string
+          user_id: string
+          session_id: string
+          channel: DeliveryChannel
+          status: DeliveryStatus
+          provider_message_id?: string | null
+          provider?: string | null
+          recipient?: string | null
+          error?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_id: string
+          channel: DeliveryChannel
+          status?: DeliveryStatus
+          provider_message_id?: string | null
+          provider?: string | null
+          recipient?: string | null
+          error?: string | null
+          scheduled_for?: string | null
+          sent_at?: string | null
+        }
+        Update: {
+          status?: DeliveryStatus
+          provider_message_id?: string | null
+          error?: string | null
+          sent_at?: string | null
           updated_at?: string
         }
       }

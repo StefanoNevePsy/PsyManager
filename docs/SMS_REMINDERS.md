@@ -1,19 +1,39 @@
 # Promemoria SMS — guida alla configurazione
 
-Questa funzione invia automaticamente un SMS di promemoria appuntamento ai
-pazienti, in modo simile ai promemoria WhatsApp già presenti in
-**Impostazioni**, ma via SMS tradizionale (funziona anche su numeri senza
-WhatsApp e non richiede che il paziente abbia installato nulla).
+## Due modi per attivarli
 
-**È disattivata di default.** Finché non completi tutti i passaggi qui sotto
-(provider configurato, secrets impostati, funzione pianificata e attivata
-nelle impostazioni), non parte nessun SMS: `sms_enabled` è `false` per ogni
-utente appena create/aggiornate le impostazioni.
+**A. Dal database (consigliato — nessun terminale)**
+L'invio è già incluso in `supabase-setup.sql`: quando esegui quel file vengono
+create anche le funzioni di invio e la pianificazione automatica. Ti restano
+solo due cose, entrambe dall'app:
 
-Il tutto gira lato server (una Supabase Edge Function), quindi funziona anche
-a telefono/PC spenti, secondo l'orario che imposti tu.
+1. **Impostazioni → Credenziali provider SMS**: scegli il provider dal menu
+   (SMSHosting, Aruba, Twilio o "Altro"), incolla le due credenziali e salva.
+2. Premi **"Invia SMS di prova"** con il tuo numero. Se arriva, hai finito.
+3. **Impostazioni → Promemoria SMS automatici**: accendi l'interruttore,
+   scegli anticipo, regola di invio e ore di silenzio.
+4. Sulla scheda di ogni paziente, spunta **Consenso SMS**.
 
----
+Nota: `pg_cron` e `pg_net` devono essere attive sul progetto Supabase
+(Database → Extensions). Se lo script segnala che non ha potuto attivarle,
+abilitale da lì e riesegui il file — il resto rimane invariato.
+
+**B. Con la funzione server (alternativa avanzata)**
+Serve solo se usi Skebby, che richiede due chiamate concatenate (login e poi
+invio) mal gestibili dal database. Richiede il terminale e la CLI di
+Supabase: le istruzioni sono più avanti in questo documento.
+
+## Quale provider scegliere
+
+**SMSHosting** è il consiglio predefinito per l'Italia: API a chiamata
+singola (ideale per l'invio dal database), registrazione del mittente gestita
+da loro, crediti prepagati senza canone, circa 4-5 centesimi a SMS.
+**Aruba SMS** è equivalente e comodo se hai già altri servizi Aruba.
+**Twilio** è il più solido ma costa di più per l'Italia.
+**Skebby** è ottimo ma richiede il metodo B.
+
+Evita i rivenditori molto economici senza rotte certificate: per promemoria
+clinici la consegna deve essere affidabile.
 
 ## Come funziona (in breve)
 

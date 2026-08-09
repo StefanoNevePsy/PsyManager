@@ -243,6 +243,18 @@ Due workflow automatici proteggono il database Supabase free tier:
   pg_restore --clean --if-exists -d postgres://[connection_string] file.dump
   ```
 
+## Promemoria automatici SMS (opzionale, disattivato di default)
+
+Infrastruttura completa ma inerte finché non la configuri:
+- `supabase/functions/send-sms-reminders/` — Edge Function che invia lato
+  server (funziona ad app chiusa), con adattatori Skebby / Twilio / webhook
+- `reminder_deliveries` — registro consegne; `UNIQUE(session_id, channel)`
+  rende impossibile il doppio invio anche con esecuzioni sovrapposte
+- La chiave del provider è un **secret della funzione**, mai nel database né
+  nel bundle client
+
+Istruzioni operative complete: **`docs/SMS_REMINDERS.md`**
+
 ## Resources
 
 - [Supabase Docs](https://supabase.com/docs)

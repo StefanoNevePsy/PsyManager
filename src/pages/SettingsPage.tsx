@@ -13,6 +13,7 @@ import { DEFAULT_TAX_SETTINGS, effectiveTaxRate } from '@/lib/netIncome'
 import { ensureNotificationPermission } from '@/lib/reminders'
 import { Button, Card, Input, Select, PageHeader, useToast } from '@/components/ui'
 import WhatsAppSettings from '@/components/settings/WhatsAppSettings'
+import SmsSettings from '@/components/settings/SmsSettings'
 import AppLockSettings from '@/components/settings/AppLockSettings'
 import ReceiptSettings from '@/components/settings/ReceiptSettings'
 
@@ -358,6 +359,9 @@ export default function SettingsPage() {
 
       {/* WhatsApp patient reminders */}
       <WhatsAppSettings />
+
+      {/* Automatic SMS reminders (off until configured) */}
+      <SmsSettings />
 
       {/* Receipt header and numbering */}
       <ReceiptSettings />

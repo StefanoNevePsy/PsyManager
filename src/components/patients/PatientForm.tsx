@@ -135,6 +135,21 @@ export default function PatientForm({
         hint="Numero di telefono primario"
       />
 
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          id="sms_consent"
+          {...register('sms_consent')}
+          className="mt-0.5 w-4 h-4 rounded border-border text-primary focus:ring-primary"
+        />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground">Consenso SMS</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Il paziente ha acconsentito a ricevere promemoria via SMS.
+          </p>
+        </div>
+      </label>
+
       {/* Additional contacts */}
       <div className="pt-2 border-t border-border space-y-3">
         <div className="flex items-center justify-between">

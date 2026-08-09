@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
 import { useSessions, SessionWithRelations } from '@/hooks/useSessions'
 import { useReminderSettings } from '@/hooks/useReminderSettings'
 import { useMarkReminderSent, useUnmarkReminderSent } from '@/hooks/useReminderSent'
+import { useReminderDeliveries, ReminderDelivery } from '@/hooks/useReminderDeliveries'
 import { usePatientContacts } from '@/hooks/usePatientContacts'
 import { sessionDisplayName } from '@/lib/sessionDisplay'
 import {
@@ -45,6 +46,9 @@ export default function RemindersPage() {
 
   const totalCount = daySessions.length
   const pendingCount = daySessions.filter((s) => !s.reminder_sent_at).length
+
+  const sessionIds = useMemo(() => daySessions.map((s) => s.id), [daySessions])
+  const { data: smsDeliveries } = useReminderDeliveries(sessionIds)
 
   const isToday = isSameDay(selectedDate, today)
   const isTomorrow = isSameDay(selectedDate, addDays(today, 1))
@@ -146,7 +150,12 @@ export default function RemindersPage() {
       ) : (
         <Card padding="none" className="divide-y divide-border/60 overflow-hidden">
           {daySessions.map((session) => (
-            <ReminderRow key={session.id} session={session} onSend={handleSend} />
+            <ReminderRow
+              key={session.id}
+              session={session}
+              onSend={handleSend}
+              smsDelivery={smsDeliveries?.get(session.id)}
+            />
           ))}
         </Card>
       )}
@@ -157,9 +166,10 @@ export default function RemindersPage() {
 interface ReminderRowProps {
   session: SessionWithRelations
   onSend: (session: SessionWithRelations, phone: string) => void
+  smsDelivery?: ReminderDelivery
 }
 
-function ReminderRow({ session, onSend }: ReminderRowProps) {
+function ReminderRow({ session, onSend, smsDelivery }: ReminderRowProps) {
   const { toast } = useToast()
   const { mutateAsync: unmarkSent, isPending: isUnmarking } = useUnmarkReminderSent()
 
@@ -197,6 +207,8 @@ function ReminderRow({ session, onSend }: ReminderRowProps) {
         <p className="text-xs text-muted-foreground truncate">{session.service_types?.name}</p>
       </div>
 
+      <SmsDeliveryBadge delivery={smsDelivery} />
+
       {sent ? (
         <div className="flex items-center gap-3 flex-shrink-0">
           <span className="inline-flex items-center gap-1 text-xs font-medium text-success bg-success-soft border border-success/20 rounded-full px-2.5 py-1">
@@ -228,5 +240,55 @@ function ReminderRow({ session, onSend }: ReminderRowProps) {
         </Tooltip>
       )}
     </div>
+  )
+}
+
+const SMS_DELIVERY_BADGE: Record<
+  ReminderDelivery['status'],
+  { label: string; className: string }
+> = {
+  pending: {
+    label: 'SMS in coda',
+    className: 'bg-muted text-muted-foreground border-border/60',
+  },
+  sent: {
+    label: 'SMS inviato',
+    className: 'bg-info/10 text-info border-info/20',
+  },
+  delivered: {
+    label: 'SMS consegnato',
+    className: 'bg-success-soft text-success border-success/20',
+  },
+  failed: {
+    label: 'SMS fallito',
+    className: 'bg-destructive-soft text-destructive border-destructive/20',
+  },
+  skipped: {
+    label: 'SMS saltato',
+    className: 'bg-muted text-muted-foreground border-border/60',
+  },
+}
+
+/**
+ * Small status badge for the automatic SMS reminder of a session, sourced
+ * from the reminder_deliveries ledger. Renders nothing when there is no
+ * delivery row yet (SMS reminders disabled, rule didn't match, or the
+ * scheduler hasn't run yet).
+ */
+function SmsDeliveryBadge({ delivery }: { delivery?: ReminderDelivery }) {
+  if (!delivery) return null
+
+  const { label, className } = SMS_DELIVERY_BADGE[delivery.status]
+
+  return (
+    <span
+      title={delivery.status === 'failed' ? delivery.error || undefined : undefined}
+      className={clsx(
+        'flex-shrink-0 inline-flex items-center text-xs font-medium border rounded-full px-2.5 py-1',
+        className
+      )}
+    >
+      {label}
+    </span>
   )
 }

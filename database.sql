@@ -485,6 +485,9 @@ create table if not exists public.calendar_settings (
   title_format text not null default 'initials'
     check (title_format in ('full', 'first_initial', 'initials')),
   color_by_service boolean not null default true,
+  -- Push session notes into the Google event description (off: clinical
+  -- content should not leave for Google's servers by default)
+  include_notes boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

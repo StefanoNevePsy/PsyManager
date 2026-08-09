@@ -38,6 +38,7 @@ export const useGoogleCalendarSync = () => {
   const { data: calendarSettings } = useCalendarSettings()
   const titleFormat = calendarSettings?.title_format ?? DEFAULT_CALENDAR_SETTINGS.title_format
   const colorByService = calendarSettings?.color_by_service ?? DEFAULT_CALENDAR_SETTINGS.color_by_service
+  const includeNotes = calendarSettings?.include_notes ?? DEFAULT_CALENDAR_SETTINGS.include_notes
 
   // Limit the sessions we operate on to a sane window —
   // an infinite recurrence could otherwise generate thousands of sessions
@@ -64,7 +65,7 @@ export const useGoogleCalendarSync = () => {
         session.service_types.name,
         session.scheduled_at,
         session.duration_minutes,
-        session.notes,
+        includeNotes ? session.notes : null,
         session.patient_id,
         session.service_type_id,
         session.id,
@@ -92,7 +93,7 @@ export const useGoogleCalendarSync = () => {
       }
       return null
     },
-    [isConnected, titleFormat, colorByService]
+    [isConnected, titleFormat, colorByService, includeNotes]
   )
 
   const removeSessionFromCalendar = useCallback(

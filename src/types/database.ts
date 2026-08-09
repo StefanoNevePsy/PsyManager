@@ -548,6 +548,7 @@ export interface Database {
           user_id: string
           title_format: CalendarTitleFormat
           color_by_service: boolean
+          include_notes: boolean
           created_at: string
           updated_at: string
         }
@@ -556,12 +557,14 @@ export interface Database {
           user_id: string
           title_format?: CalendarTitleFormat
           color_by_service?: boolean
+          include_notes?: boolean
           created_at?: string
           updated_at?: string
         }
         Update: {
           title_format?: CalendarTitleFormat
           color_by_service?: boolean
+          include_notes?: boolean
           updated_at?: string
         }
       }

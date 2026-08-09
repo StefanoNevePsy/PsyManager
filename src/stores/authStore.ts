@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { Session, User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { clearLocalUserData } from '@/lib/localData'
 
 interface AuthState {
   user: User | null
@@ -80,6 +81,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     set({ loading: true })
     await supabase.auth.signOut()
+    // Signing out must leave nothing behind on the device: the persisted
+    // query cache holds patients, sessions and clinical notes in plaintext,
+    // and the Google token stays valid for its remaining lifetime. On a
+    // shared/clinic device the next person would otherwise still reach them.
+    clearLocalUserData()
     set({
       user: null,
       session: null,

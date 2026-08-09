@@ -47,6 +47,8 @@ export default function GoogleCalendarSync() {
   const titleFormat = calendarSettings?.title_format ?? DEFAULT_CALENDAR_SETTINGS.title_format
   const colorByService =
     calendarSettings?.color_by_service ?? DEFAULT_CALENDAR_SETTINGS.color_by_service
+  const includeNotes =
+    calendarSettings?.include_notes ?? DEFAULT_CALENDAR_SETTINGS.include_notes
 
   useEffect(() => {
     if (!initialized) {
@@ -74,6 +76,20 @@ export default function GoogleCalendarSync() {
     const checked = e.target.checked
     updateCalendarSettings.mutate(
       { color_by_service: checked },
+      {
+        onSuccess: () => {
+          toast.success('Preferenze calendario salvate')
+          setShowApplyPrompt(true)
+        },
+        onError: () => toast.error('Errore nel salvataggio delle preferenze'),
+      }
+    )
+  }
+
+  const handleNotesToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked
+    updateCalendarSettings.mutate(
+      { include_notes: checked },
       {
         onSuccess: () => {
           toast.success('Preferenze calendario salvate')
@@ -169,6 +185,23 @@ export default function GoogleCalendarSync() {
             />
             Colora gli eventi per tipo di prestazione
           </label>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeNotes}
+                onChange={handleNotesToggle}
+                disabled={syncing}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-ring focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              Includi le note della seduta nell'evento
+            </label>
+            <p className="text-xs text-muted-foreground mt-1 ml-6">
+              Sconsigliato: le note possono contenere informazioni cliniche che
+              verrebbero salvate sui server di Google.
+            </p>
+          </div>
 
           {showApplyPrompt && (
             <div className="flex items-center gap-2 flex-wrap pt-1">

@@ -27,6 +27,7 @@ import {
 } from '@/components/ui'
 import ClinicalNoteForm from '@/components/clinical-notes/ClinicalNoteForm'
 import { patientFullName } from '@/lib/sessionDisplay'
+import { sanitizeHtml } from '@/lib/sanitize'
 
 export default function ClinicalNotesPage() {
   const { toast } = useToast()
@@ -287,7 +288,7 @@ export default function ClinicalNotesPage() {
                   return (
                     <div
                       className="prose prose-sm max-w-none text-foreground/85 dark:prose-invert prose-p:my-1 prose-headings:font-display prose-headings:font-semibold prose-headings:tracking-tight prose-blockquote:border-l-2 prose-blockquote:border-primary prose-blockquote:pl-3 prose-blockquote:italic prose-code:bg-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-2xs prose-code:before:content-none prose-code:after:content-none line-clamp-6"
-                      dangerouslySetInnerHTML={{ __html: content }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
                     />
                   )
                 }

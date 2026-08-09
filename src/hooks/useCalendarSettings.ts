@@ -9,6 +9,8 @@ type CalendarSettingsUpdate = Database['public']['Tables']['calendar_settings'][
 export const DEFAULT_CALENDAR_SETTINGS = {
   title_format: 'initials' as const,
   color_by_service: true,
+  // Clinical notes stay out of Google unless explicitly opted in
+  include_notes: false,
 }
 
 export const useCalendarSettings = () => {

@@ -179,7 +179,15 @@ npm run cap:open:android # Open in Android Studio
 
 ## Database Setup Quick Reference
 
-Vedi `database.sql` per lo schema completo. Riassunto tabelle:
+**Setup e aggiornamenti: esegui `supabase-setup.sql`** (radice del progetto) nel
+SQL Editor di Supabase. È un unico file idempotente: funziona sia su progetti
+nuovi sia su progetti esistenti con qualunque versione precedente dello schema,
+e può essere rieseguito senza rischi. Verificato su PostgreSQL 16 con quattro
+prove: installazione pulita, riesecuzione, aggiornamento da schema datato con
+dati reali, e confronto degli schemi risultanti (identici).
+
+`database.sql` e `migrations/` restano solo come storico — NON eseguirli in
+sequenza, l'installazione si interromperebbe. Riassunto tabelle:
 
 | Tabella | Descrizione | Chiavi |
 |---------|-------------|--------|

@@ -1,15 +1,13 @@
--- PsyManager Database Schema for Supabase
+-- PsyManager Database Schema (STORICO — non usare per installare)
 --
--- SETUP ORDER (important):
---   1. Run this entire file in the Supabase SQL editor.
---   2. Then run EVERY file in migrations/ in numeric order.
+-- ⚠️  Per creare o aggiornare il database usa `supabase-setup.sql` nella
+--     radice del progetto: è un unico file, sicuro su progetti nuovi ed
+--     esistenti, e rieseguibile senza rischi.
 --
--- This file alone is NOT a complete install: the storage bucket for
--- attachments (with its private-by-default policies) lives in
--- migrations/007, the receipts tables in migrations/011, and the
--- tenant-isolation hardening in migrations/012. Creating the attachments
--- bucket by hand in the dashboard would default it to PUBLIC, exposing
--- every uploaded clinical document by URL — always apply migration 007.
+-- Questo file e la cartella migrations/ restano come storico delle modifiche
+-- allo schema. NON eseguirli in sequenza: database.sql è stato aggiornato nel
+-- tempo e alcune migration proverebbero a ricreare oggetti già presenti,
+-- interrompendo l'installazione.
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";

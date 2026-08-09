@@ -45,6 +45,7 @@ export default function PatientForm({
       notes: initialData?.notes || '',
       group_id: initialData?.group_id || '',
       group_role: initialData?.group_role || '',
+      sms_consent: initialData?.sms_consent || false,
       contacts: [],
       family_members: [],
     },

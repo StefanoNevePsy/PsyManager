@@ -14,6 +14,7 @@ import { ensureNotificationPermission } from '@/lib/reminders'
 import { Button, Card, Input, Select, PageHeader, useToast } from '@/components/ui'
 import WhatsAppSettings from '@/components/settings/WhatsAppSettings'
 import SmsSettings from '@/components/settings/SmsSettings'
+import SmsCredentialsCard from '@/components/settings/SmsCredentialsCard'
 import AppLockSettings from '@/components/settings/AppLockSettings'
 import ReceiptSettings from '@/components/settings/ReceiptSettings'
 
@@ -362,6 +363,9 @@ export default function SettingsPage() {
 
       {/* Automatic SMS reminders (off until configured) */}
       <SmsSettings />
+
+      {/* SMS provider credentials (write-only: never readable by the app) */}
+      <SmsCredentialsCard />
 
       {/* Receipt header and numbering */}
       <ReceiptSettings />

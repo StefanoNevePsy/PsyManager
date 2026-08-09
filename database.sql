@@ -1,5 +1,15 @@
 -- PsyManager Database Schema for Supabase
--- Copy and paste this entire file into the SQL editor in Supabase
+--
+-- SETUP ORDER (important):
+--   1. Run this entire file in the Supabase SQL editor.
+--   2. Then run EVERY file in migrations/ in numeric order.
+--
+-- This file alone is NOT a complete install: the storage bucket for
+-- attachments (with its private-by-default policies) lives in
+-- migrations/007, the receipts tables in migrations/011, and the
+-- tenant-isolation hardening in migrations/012. Creating the attachments
+-- bucket by hand in the dashboard would default it to PUBLIC, exposing
+-- every uploaded clinical document by URL — always apply migration 007.
 
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";

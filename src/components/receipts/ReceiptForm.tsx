@@ -71,6 +71,15 @@ interface Props {
   onSubmit: (data: ReceiptFormOutput) => void | Promise<void>
   onCancel: () => void
   loading?: boolean
+  /**
+   * Pre-fill from the "Da fatturare" flow (ReceiptsPage): a set of
+   * already-picked sessions and their common recipient. Ignored when
+   * `initialData` is also set (editing an existing receipt keeps its own
+   * linked sessions instead). Standalone use of the form (no props) is
+   * unaffected.
+   */
+  initialSessionIds?: string[]
+  initialRecipient?: { patientId?: string; groupId?: string; name: string }
 }
 
 const parseRef = (
@@ -82,17 +91,31 @@ const parseRef = (
   return { type: null, id: null }
 }
 
-export default function ReceiptForm({ initialData, onSubmit, onCancel, loading = false }: Props) {
+export default function ReceiptForm({
+  initialData,
+  onSubmit,
+  onCancel,
+  loading = false,
+  initialSessionIds,
+  initialRecipient,
+}: Props) {
   const { data: patients = [] } = usePatients()
   const { data: groups = [] } = usePatientGroups()
   const { data: settings } = useReceiptSettings()
   const { data: billedSessionIds = new Set<string>() } = useBilledSessionIds()
 
+  // initialData (editing) wins over initialRecipient (the "Da fatturare"
+  // prefill) — the two never occur together in practice, but this keeps the
+  // precedence explicit.
   const initialRef = initialData?.patient_id
     ? `patient:${initialData.patient_id}`
     : initialData?.group_id
       ? `group:${initialData.group_id}`
-      : ''
+      : initialRecipient?.patientId
+        ? `patient:${initialRecipient.patientId}`
+        : initialRecipient?.groupId
+          ? `group:${initialRecipient.groupId}`
+          : ''
 
   const initialLinkedSessionIds = useMemo(
     () => new Set((initialData?.receipt_sessions ?? []).map((r) => r.session_id)),
@@ -110,7 +133,7 @@ export default function ReceiptForm({ initialData, onSubmit, onCancel, loading =
     resolver: zodResolver(receiptFormSchema),
     defaultValues: {
       recipient_ref: initialRef,
-      recipient_name: initialData?.recipient_name || '',
+      recipient_name: initialData?.recipient_name || initialRecipient?.name || '',
       recipient_tax_code: initialData?.recipient_tax_code || '',
       recipient_address: initialData?.recipient_address || '',
       issue_date: initialData?.issue_date || new Date().toISOString().split('T')[0],
@@ -124,8 +147,8 @@ export default function ReceiptForm({ initialData, onSubmit, onCancel, loading =
     },
   })
 
-  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>(
-    () => Array.from(initialLinkedSessionIds)
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>(() =>
+    initialData ? Array.from(initialLinkedSessionIds) : (initialSessionIds ?? [])
   )
 
   const recipientRef = useWatch({ control, name: 'recipient_ref' })
@@ -193,7 +216,10 @@ export default function ReceiptForm({ initialData, onSubmit, onCancel, loading =
     return d
   }, [])
   const now = useMemo(() => new Date(), [])
-  const { data: recentSessions = [] } = useSessions(twelveMonthsAgo, now)
+  const { data: recentSessions = [], isLoading: sessionsLoading } = useSessions(
+    twelveMonthsAgo,
+    now
+  )
 
   const { type: recipientType, id: recipientId } = parseRef(recipientRef)
 
@@ -215,13 +241,35 @@ export default function ReceiptForm({ initialData, onSubmit, onCancel, loading =
       .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime())
   }, [recentSessions, recipientType, recipientId, billedSessionIds, initialLinkedSessionIds])
 
-  // Sessions no longer eligible (e.g. recipient changed) shouldn't linger selected.
+  // Sessions no longer eligible (e.g. recipient changed) shouldn't linger
+  // selected. Gated on sessionsLoading: while `recentSessions` hasn't
+  // arrived yet, candidateSessions is transiently empty and this must NOT
+  // prune the sessions we were pre-selected with (editing an existing
+  // receipt, or the "Da fatturare" prefill) before they get a chance to load.
   useEffect(() => {
+    if (sessionsLoading) return
     setSelectedSessionIds((prev) =>
       prev.filter((id) => candidateSessions.some((s) => s.id === id))
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipientId, recipientType])
+  }, [recipientId, recipientType, sessionsLoading])
+
+  // Sum the amount for sessions pre-selected via `initialSessionIds` (the
+  // "Da fatturare" prefill) once their data has arrived — mirrors what
+  // toggleSession does interactively. Runs only once so a manual edit of
+  // the amount field afterwards is never overwritten.
+  const appliedInitialAmount = useRef(false)
+  useEffect(() => {
+    if (initialData || appliedInitialAmount.current) return
+    if (!initialSessionIds || initialSessionIds.length === 0) return
+    if (sessionsLoading) return
+    const matching = candidateSessions.filter((s) => initialSessionIds.includes(s.id))
+    if (matching.length === 0) return
+    const total = matching.reduce((sum, s) => sum + Number(s.service_types?.price ?? 0), 0)
+    setValue('amount', Math.round(total * 100) / 100)
+    appliedInitialAmount.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateSessions, sessionsLoading])
 
   const toggleSession = (sessionId: string) => {
     setSelectedSessionIds((prev) => {

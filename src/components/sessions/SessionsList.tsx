@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { format, isSameDay } from 'date-fns'
 import { it } from 'date-fns/locale'
 import {
@@ -8,13 +9,127 @@ import {
   Calendar,
   DollarSign,
 } from 'lucide-react'
-import { Button, EmptyState, Tooltip } from '@/components/ui'
+import { Button, EmptyState, Tooltip, useToast } from '@/components/ui'
 import { SessionWithRelations } from '@/hooks/useSessions'
+import { useBillingStatus, useSetInvoiceExempt, BillingStatusRow } from '@/hooks/useBillingStatus'
 import { getServiceColor } from '@/lib/serviceColors'
 import { usePatientBalanceMap } from '@/hooks/usePayments'
 import { sessionDisplayName, SESSION_STATUS_LABELS } from '@/lib/sessionDisplay'
 import BalanceDot from '@/components/payments/BalanceDot'
 import SessionStatusControl from '@/components/sessions/SessionStatusControl'
+
+/**
+ * Billing badge for a single session row: shows where it stands re:
+ * invoicing, and — for the two actionable states — a tiny menu to toggle
+ * the manual "no invoice needed" exemption. 'not_due' renders nothing.
+ */
+function BillingBadge({ sessionId, row }: { sessionId: string; row: BillingStatusRow | undefined }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const setExempt = useSetInvoiceExempt()
+  const { toast } = useToast()
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
+
+  const status = row?.billing_status
+  if (!status || status === 'not_due') return null
+
+  const isPending = setExempt.isPending && setExempt.variables?.id === sessionId
+
+  const handleToggleExempt = async (event: React.MouseEvent, exempt: boolean) => {
+    event.stopPropagation()
+    setMenuOpen(false)
+    try {
+      await setExempt.mutateAsync({ id: sessionId, exempt })
+      toast.success(exempt ? 'Seduta segnata come senza fattura' : 'Esenzione rimossa')
+    } catch {
+      toast.error("Errore durante l'aggiornamento dello stato di fatturazione")
+    }
+  }
+
+  if (status === 'invoiced') {
+    return (
+      <Tooltip
+        label={
+          row.receipt_date
+            ? `Emessa il ${format(new Date(row.receipt_date), 'd MMM yyyy', { locale: it })}`
+            : 'Fatturata'
+        }
+      >
+        <span className="inline-flex items-center text-2xs font-semibold px-2 py-1 rounded-full border text-success bg-success-soft border-success/30 whitespace-nowrap">
+          Fatt. {row.receipt_number}/{row.receipt_year}
+        </span>
+      </Tooltip>
+    )
+  }
+
+  if (status === 'cash') {
+    return (
+      <Tooltip label="Pagata in contanti: nessuna fattura dovuta">
+        <span className="inline-flex items-center text-2xs font-semibold px-2 py-1 rounded-full border text-muted-foreground bg-secondary/60 border-border whitespace-nowrap">
+          Contanti
+        </span>
+      </Tooltip>
+    )
+  }
+
+  const isExempt = status === 'exempt'
+
+  return (
+    <div className="relative flex-shrink-0" ref={containerRef}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setMenuOpen((v) => !v)
+        }}
+        disabled={isPending}
+        aria-haspopup="true"
+        aria-expanded={menuOpen}
+        className={`inline-flex items-center text-2xs font-semibold px-2 py-1 rounded-full border transition-colors disabled:opacity-50 disabled:cursor-wait whitespace-nowrap ${
+          isExempt
+            ? 'text-muted-foreground bg-secondary/60 border-border'
+            : 'text-warning bg-warning-soft border-warning/30'
+        }`}
+      >
+        {isExempt ? 'Senza fattura' : 'Da fatturare'}
+      </button>
+      {menuOpen && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute z-30 mt-1 right-0 origin-top-right w-52 bg-popover border border-border rounded-lg shadow-pop overflow-hidden animate-scale-in"
+        >
+          {isExempt ? (
+            <button
+              type="button"
+              onClick={(e) => handleToggleExempt(e, false)}
+              className="w-full flex items-center px-3 py-2 text-sm text-left hover:bg-secondary transition-colors text-popover-foreground"
+            >
+              Rimuovi esenzione
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => handleToggleExempt(e, true)}
+              className="w-full flex items-center px-3 py-2 text-sm text-left hover:bg-secondary transition-colors text-popover-foreground"
+            >
+              Segna come senza fattura
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   sessions: SessionWithRelations[]
@@ -34,6 +149,8 @@ export default function SessionsList({
   emptyDescription = 'Non ci sono sedute in programma',
 }: Props) {
   const balanceMap = usePatientBalanceMap()
+  const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions])
+  const { data: billingMap = new Map<string, BillingStatusRow>() } = useBillingStatus(sessionIds)
   if (sessions.length === 0) {
     return (
       <EmptyState
@@ -139,6 +256,7 @@ export default function SessionsList({
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      <BillingBadge sessionId={session.id} row={billingMap.get(session.id)} />
                       <SessionStatusControl sessionId={session.id} status={session.status} />
                       {onPay && session.service_types?.type === 'private' && (
                         <Tooltip label="Registra pagamento">

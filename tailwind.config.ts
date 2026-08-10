@@ -1,5 +1,6 @@
 import type { Config } from 'tailwindcss'
 import defaultTheme from 'tailwindcss/defaultTheme'
+import plugin from 'tailwindcss/plugin'
 import typography from '@tailwindcss/typography'
 
 const config: Config = {
@@ -84,7 +85,17 @@ const config: Config = {
       },
     },
   },
-  plugins: [typography],
+  plugins: [
+    typography,
+    // Tailwind 3 has no built-in pointer variant (it landed in v4), so
+    // `pointer-coarse:` classes would compile to nothing. Touch targets need
+    // to grow on touch devices — including touch laptops and tablets — not
+    // merely on narrow screens, so this keys off the input device.
+    plugin(({ addVariant }) => {
+      addVariant('pointer-coarse', '@media (pointer: coarse)')
+      addVariant('pointer-fine', '@media (pointer: fine)')
+    }),
+  ],
 }
 
 export default config

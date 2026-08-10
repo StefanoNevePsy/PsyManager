@@ -192,7 +192,7 @@ export default function PaymentsPage() {
             <button
               onClick={() => setTab('payments')}
               aria-pressed={tab === 'payments'}
-              className={`px-3 h-8 rounded-md text-sm font-medium transition-all ${
+              className={`px-3 h-9 sm:h-8 pointer-coarse:min-h-[44px] rounded-md text-sm font-medium transition-all ${
                 tab === 'payments'
                   ? 'bg-card text-foreground shadow-soft'
                   : 'text-muted-foreground hover:text-foreground'
@@ -203,7 +203,7 @@ export default function PaymentsPage() {
             <button
               onClick={() => setTab('balances')}
               aria-pressed={tab === 'balances'}
-              className={`px-3 h-8 rounded-md text-sm font-medium transition-all ${
+              className={`px-3 h-9 sm:h-8 pointer-coarse:min-h-[44px] rounded-md text-sm font-medium transition-all ${
                 tab === 'balances'
                   ? 'bg-card text-foreground shadow-soft'
                   : 'text-muted-foreground hover:text-foreground'

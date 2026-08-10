@@ -74,7 +74,7 @@ export default function Sidebar({ isOpen, onClose }: Props) {
         </Link>
         <button
           onClick={onClose}
-          className="md:hidden p-1.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground"
+          className="md:hidden p-1.5 pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px] flex items-center justify-center rounded-md hover:bg-secondary transition-colors text-muted-foreground"
           aria-label="Chiudi menu"
         >
           <X className="w-5 h-5" />
@@ -97,7 +97,7 @@ export default function Sidebar({ isOpen, onClose }: Props) {
                     to={item.path}
                     onClick={onClose}
                     className={clsx(
-                      'group relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150 ease-out-quart',
+                      'group relative flex items-center gap-3 px-3 py-2 pointer-coarse:min-h-[44px] rounded-md text-sm transition-colors duration-150 ease-out-quart',
                       active
                         ? 'bg-primary-soft text-primary font-medium'
                         : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'

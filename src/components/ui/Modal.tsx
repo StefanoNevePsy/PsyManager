@@ -9,6 +9,13 @@ interface ModalProps {
   description?: string
   children: React.ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /**
+   * Optional action bar pinned outside the scrollable body (e.g. Annulla /
+   * Conferma). On tall forms this keeps the primary action reachable
+   * without hunting for it after scrolling — especially on phones where
+   * the sheet can fill most of the viewport.
+   */
+  footer?: React.ReactNode
 }
 
 const sizeClasses = {
@@ -25,6 +32,7 @@ export default function Modal({
   description,
   children,
   size = 'md',
+  footer,
 }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return
@@ -53,7 +61,11 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
         className={clsx(
-          'w-full bg-card border border-border rounded-t-2xl sm:rounded-xl shadow-modal max-h-[92vh] overflow-hidden flex flex-col animate-slide-up',
+          // Near-full-height sheet on phones (dvh accounts for mobile
+          // browser chrome that vh ignores), a normal centred dialog from
+          // sm/tablet up.
+          'w-full bg-card border border-border rounded-t-2xl sm:rounded-xl shadow-modal',
+          'max-h-[100dvh] sm:max-h-[92vh] overflow-hidden flex flex-col animate-slide-up',
           sizeClasses[size]
         )}
         onClick={(e) => e.stopPropagation()}
@@ -85,6 +97,14 @@ export default function Modal({
           </div>
         )}
         <div className="px-6 pb-6 overflow-auto flex-1">{children}</div>
+        {footer && (
+          <div
+            className="px-6 py-4 border-t border-border bg-card flex-shrink-0"
+            style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   )

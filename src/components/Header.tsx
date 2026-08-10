@@ -48,7 +48,7 @@ export default function Header({ onMenuClick }: Props) {
       <div className="flex items-center gap-2">
         <button
           onClick={onMenuClick}
-          className="md:hidden -ml-2 p-2 rounded-md hover:bg-secondary transition-colors"
+          className="md:hidden -ml-2 p-2 rounded-md hover:bg-secondary transition-colors pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px] flex items-center justify-center"
           aria-label="Apri menu di navigazione"
         >
           <Menu className="w-5 h-5" />
@@ -80,7 +80,7 @@ export default function Header({ onMenuClick }: Props) {
         <button
           onClick={() => window.dispatchEvent(new CustomEvent(OPEN_COMMAND_PALETTE_EVENT))}
           aria-label="Cerca"
-          className="sm:hidden h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
+          className="sm:hidden h-9 w-9 pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px] inline-flex items-center justify-center rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
         >
           <Search className="w-[18px] h-[18px]" strokeWidth={1.85} />
         </button>
@@ -96,7 +96,7 @@ export default function Header({ onMenuClick }: Props) {
             aria-label={
               theme === 'light' ? 'Passa al tema scuro' : 'Passa al tema chiaro'
             }
-            className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
+            className="h-9 w-9 pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px] inline-flex items-center justify-center rounded-md hover:bg-secondary/70 transition-colors text-muted-foreground hover:text-foreground"
           >
             {theme === 'light' ? (
               <Moon className="w-[18px] h-[18px]" strokeWidth={1.85} />
@@ -111,7 +111,7 @@ export default function Header({ onMenuClick }: Props) {
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Menu utente"
             aria-expanded={isOpen}
-            className="h-9 pl-1 pr-2 rounded-full hover:bg-secondary/70 transition-colors flex items-center gap-2"
+            className="h-9 pointer-coarse:min-h-[44px] pl-1 pr-2 rounded-full hover:bg-secondary/70 transition-colors flex items-center gap-2"
           >
             <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
               {initial}

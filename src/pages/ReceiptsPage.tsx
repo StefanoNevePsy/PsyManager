@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { Plus, Receipt as ReceiptIcon, Edit, Trash2, Eye, Stamp, Settings2 } from 'lucide-react'
@@ -11,6 +12,8 @@ import {
   useDeleteReceipt,
   ReceiptWithRelations,
 } from '@/hooks/useReceipts'
+import { useSessionsToInvoice } from '@/hooks/useBillingStatus'
+import { sessionDisplayName } from '@/lib/sessionDisplay'
 import {
   Button,
   Card,
@@ -26,11 +29,18 @@ import {
 import ReceiptForm, { ReceiptFormOutput } from '@/components/receipts/ReceiptForm'
 import ReceiptPrintView from '@/components/receipts/ReceiptPrintView'
 
+/** What the "Da fatturare" selection hands to a freshly opened ReceiptForm. */
+interface SessionPrefill {
+  sessionIds: string[]
+  recipient: { patientId?: string; groupId?: string; name: string }
+}
+
 const eur = (n: number) =>
   n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function ReceiptsPage() {
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const { data: receipts = [], isLoading } = useReceipts()
   const { data: settings } = useReceiptSettings()
 
@@ -43,6 +53,91 @@ export default function ReceiptsPage() {
   const [editing, setEditing] = useState<ReceiptWithRelations | null>(null)
   const [previewing, setPreviewing] = useState<ReceiptWithRelations | null>(null)
   const [deleting, setDeleting] = useState<ReceiptWithRelations | null>(null)
+
+  // --- "Da fatturare": sessions billable but not yet on any receipt --------
+  const [sessionPrefill, setSessionPrefill] = useState<SessionPrefill | null>(null)
+  const [toInvoicePeriodMonths, setToInvoicePeriodMonths] = useState(3)
+  const [selectedToInvoiceIds, setSelectedToInvoiceIds] = useState<Set<string>>(new Set())
+
+  const toInvoicePeriod = useMemo(() => {
+    const to = new Date()
+    const from = new Date()
+    from.setMonth(from.getMonth() - toInvoicePeriodMonths)
+    return { from, to }
+  }, [toInvoicePeriodMonths])
+
+  const { data: toInvoiceSessions = [], isLoading: toInvoiceLoading } = useSessionsToInvoice(
+    toInvoicePeriod.from,
+    toInvoicePeriod.to
+  )
+
+  // The list is period-scoped: a stale id from a previous period just won't
+  // match any current row, but clearing it on period change keeps the
+  // "seleziona tutto" checkbox intuitive.
+  useEffect(() => {
+    setSelectedToInvoiceIds(new Set())
+  }, [toInvoicePeriodMonths])
+
+  const toggleToInvoice = (id: string) => {
+    setSelectedToInvoiceIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allToInvoiceSelected =
+    toInvoiceSessions.length > 0 && toInvoiceSessions.every((s) => selectedToInvoiceIds.has(s.id))
+
+  const toggleSelectAllToInvoice = () => {
+    setSelectedToInvoiceIds(
+      allToInvoiceSelected ? new Set() : new Set(toInvoiceSessions.map((s) => s.id))
+    )
+  }
+
+  const selectedToInvoiceSessions = useMemo(
+    () => toInvoiceSessions.filter((s) => selectedToInvoiceIds.has(s.id)),
+    [toInvoiceSessions, selectedToInvoiceIds]
+  )
+
+  const selectedToInvoiceTotal = useMemo(
+    () =>
+      selectedToInvoiceSessions.reduce(
+        (sum, s) => sum + Number(s.service_types?.price ?? 0),
+        0
+      ),
+    [selectedToInvoiceSessions]
+  )
+
+  // A single receipt can only have one recipient — this is what enforces
+  // "sessions of different patients/groups can't share a receipt".
+  const selectedRecipientKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const s of selectedToInvoiceSessions) {
+      const key = s.patient_id ? `patient:${s.patient_id}` : s.group_id ? `group:${s.group_id}` : null
+      if (key) keys.add(key)
+    }
+    return keys
+  }, [selectedToInvoiceSessions])
+
+  const canCreateFromSelection =
+    selectedToInvoiceSessions.length > 0 && selectedRecipientKeys.size === 1
+
+  const openCreateFromSelection = () => {
+    if (!canCreateFromSelection) return
+    const first = selectedToInvoiceSessions[0]
+    setSessionPrefill({
+      sessionIds: selectedToInvoiceSessions.map((s) => s.id),
+      recipient: {
+        patientId: first.patient_id ?? undefined,
+        groupId: first.group_id ?? undefined,
+        name: sessionDisplayName(first),
+      },
+    })
+    setEditing(null)
+    setModalOpen(true)
+  }
 
   const years = useMemo(() => {
     const set = new Set(receipts.map((r) => r.year))
@@ -62,17 +157,20 @@ export default function ReceiptsPage() {
 
   const openCreateModal = () => {
     setEditing(null)
+    setSessionPrefill(null)
     setModalOpen(true)
   }
 
   const openEditModal = (receipt: ReceiptWithRelations) => {
     setEditing(receipt)
+    setSessionPrefill(null)
     setModalOpen(true)
   }
 
   const closeModal = () => {
     setModalOpen(false)
     setEditing(null)
+    setSessionPrefill(null)
   }
 
   const handleSubmit = async (data: ReceiptFormOutput) => {
@@ -89,6 +187,10 @@ export default function ReceiptsPage() {
         await createMutation.mutateAsync({ receipt: receiptFields, sessionIds })
         toast.success('Ricevuta creata', { description: `€ ${eur(receiptFields.amount)}` })
       }
+      // The sessions just linked (or unlinked) flip billing_status —
+      // refresh the "Da fatturare" list and any billing badges elsewhere.
+      queryClient.invalidateQueries({ queryKey: ['session_billing_status'] })
+      setSelectedToInvoiceIds(new Set())
       closeModal()
     } catch (error) {
       toast.error('Salvataggio fallito', {
@@ -101,6 +203,8 @@ export default function ReceiptsPage() {
     if (!deleting) return
     try {
       await deleteMutation.mutateAsync(deleting.id)
+      // Deleting a receipt frees its sessions back to 'to_invoice'.
+      queryClient.invalidateQueries({ queryKey: ['session_billing_status'] })
       setDeleting(null)
       toast.success('Ricevuta eliminata')
     } catch (error) {
@@ -148,6 +252,109 @@ export default function ReceiptsPage() {
           </div>
         </Card>
       )}
+
+      <Card padding="none">
+        <div className="flex items-center justify-between p-4 border-b border-border flex-wrap gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold tracking-tight">Da fatturare</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Sedute concluse e pagabili non ancora coperte da una ricevuta. Seleziona più sedute
+              dello stesso paziente o gruppo per fatturarle insieme.
+            </p>
+          </div>
+          <div className="w-full sm:w-48">
+            <Select
+              value={String(toInvoicePeriodMonths)}
+              onChange={(e) => setToInvoicePeriodMonths(Number(e.target.value))}
+              aria-label="Periodo sedute da fatturare"
+              options={[
+                { value: '1', label: 'Ultimo mese' },
+                { value: '3', label: 'Ultimi 3 mesi' },
+                { value: '6', label: 'Ultimi 6 mesi' },
+                { value: '12', label: 'Ultimo anno' },
+              ]}
+            />
+          </div>
+        </div>
+
+        {toInvoiceLoading ? (
+          <div className="p-5 space-y-2">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-11 w-full bg-muted" />
+            ))}
+          </div>
+        ) : toInvoiceSessions.length === 0 ? (
+          <EmptyState
+            icon={ReceiptIcon}
+            title="Nessuna seduta da fatturare"
+            description="Nel periodo selezionato tutte le sedute pagabili sono già fatturate, pagate in contanti o segnate come senza fattura."
+          />
+        ) : (
+          <>
+            <div className="divide-y divide-border max-h-96 overflow-y-auto">
+              <label className="flex items-center gap-3 px-5 py-2.5 text-2xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allToInvoiceSelected}
+                  onChange={toggleSelectAllToInvoice}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary flex-shrink-0"
+                />
+                Seleziona tutto ({toInvoiceSessions.length})
+              </label>
+              {toInvoiceSessions.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex items-center gap-3 px-5 py-3 text-sm cursor-pointer hover:bg-secondary/40"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedToInvoiceIds.has(s.id)}
+                    onChange={() => toggleToInvoice(s.id)}
+                    className="w-4 h-4 rounded border-border text-primary focus:ring-primary flex-shrink-0"
+                  />
+                  <span className="w-24 flex-shrink-0 text-muted-foreground tabular-nums">
+                    {format(new Date(s.scheduled_at), 'd MMM yyyy', { locale: it })}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate font-medium text-foreground">
+                    {sessionDisplayName(s)}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+                    {s.service_types?.name}
+                  </span>
+                  <span className="tabular-nums text-foreground font-semibold flex-shrink-0">
+                    € {eur(Number(s.service_types?.price ?? 0))}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-t border-border bg-muted/20">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {selectedToInvoiceSessions.length === 0
+                    ? 'Nessuna seduta selezionata'
+                    : `${selectedToInvoiceSessions.length} sedute selezionate`}
+                </p>
+                {selectedToInvoiceSessions.length > 0 && (
+                  <p className="font-display text-xl font-semibold tabular-nums tracking-tight">
+                    € {eur(selectedToInvoiceTotal)}
+                  </p>
+                )}
+                {selectedRecipientKeys.size > 1 && (
+                  <p className="text-xs text-destructive mt-1 max-w-md">
+                    Le sedute selezionate appartengono a pazienti o gruppi diversi: seleziona
+                    sedute di un solo destinatario per emettere un'unica ricevuta.
+                  </p>
+                )}
+              </div>
+              <Button onClick={openCreateFromSelection} disabled={!canCreateFromSelection}>
+                <ReceiptIcon className="w-4 h-4" strokeWidth={2.25} />
+                Crea ricevuta da {selectedToInvoiceSessions.length} sedute
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border rounded-lg overflow-hidden border border-border">
         <div className="bg-card p-5">
@@ -340,12 +547,16 @@ export default function ReceiptsPage() {
         description={
           editing
             ? 'Aggiorna i dati della ricevuta.'
-            : 'Compila i dati per emettere una nuova ricevuta sanitaria.'
+            : sessionPrefill
+              ? `Sedute e destinatario precompilati da "Da fatturare" (${sessionPrefill.sessionIds.length} sedute).`
+              : 'Compila i dati per emettere una nuova ricevuta sanitaria.'
         }
         size="lg"
       >
         <ReceiptForm
           initialData={editing || undefined}
+          initialSessionIds={sessionPrefill?.sessionIds}
+          initialRecipient={sessionPrefill?.recipient}
           onSubmit={handleSubmit}
           onCancel={closeModal}
           loading={createMutation.isPending || updateMutation.isPending}

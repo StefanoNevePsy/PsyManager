@@ -57,15 +57,19 @@ export default function CalendarView({
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
+          size="icon"
+          aria-label="Mese precedente"
           onClick={() => onDateChange(subMonths(currentDate, 1))}
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
-        <h3 className="text-lg font-semibold capitalize">
+        <h3 className="text-base sm:text-lg font-semibold capitalize truncate px-2">
           {format(currentDate, 'MMMM yyyy', { locale: it })}
         </h3>
         <Button
           variant="ghost"
+          size="icon"
+          aria-label="Mese successivo"
           onClick={() => onDateChange(addMonths(currentDate, 1))}
         >
           <ChevronRight className="w-4 h-4" />

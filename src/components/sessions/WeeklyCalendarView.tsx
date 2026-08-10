@@ -61,25 +61,29 @@ export default function WeeklyCalendarView({
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
+          aria-label="Settimana precedente"
           onClick={() => onDateChange(new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000))}
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
-        <h3 className="text-base font-semibold">
+        <h3 className="text-sm sm:text-base font-semibold">
           {format(weekStart, 'd MMM', { locale: it })} —{' '}
           {format(weekEnd, 'd MMM yyyy', { locale: it })}
         </h3>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
+          aria-label="Settimana successiva"
           onClick={() => onDateChange(new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000))}
         >
           <ChevronRight className="w-4 h-4" />
         </Button>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
+      {/* Below md, 7 equal columns are too narrow to read — let the day
+          cards scroll horizontally at a readable width instead. */}
+      <div className="flex md:grid md:grid-cols-7 gap-2 overflow-x-auto -mx-1 px-1 pb-1 md:overflow-visible md:mx-0 md:px-0 md:pb-0">
         {days.map((day) => {
           const dayKey = format(day, 'yyyy-MM-dd')
           const daySessions = sessionsByDay[dayKey] || []
@@ -91,7 +95,7 @@ export default function WeeklyCalendarView({
           return (
             <div
               key={day.toISOString()}
-              className={`rounded-lg border p-2 space-y-2 min-h-[180px] ${
+              className={`rounded-lg border p-2 space-y-2 min-h-[180px] w-[130px] flex-shrink-0 md:w-auto md:flex-shrink ${
                 isToday
                   ? 'border-primary bg-primary/5'
                   : 'border-border hover:border-foreground/20'

@@ -414,42 +414,48 @@ export default function SessionsPage() {
 
       <Card padding="none">
         <div className="flex items-center justify-between p-4 border-b border-border flex-wrap gap-3">
+          {/* Labels hide below `sm` — three full labels ("Calendario" /
+              "Settimanale") don't fit a 360px screen; icons alone stay
+              unambiguous since the pressed state is still highlighted. */}
           <div className="inline-flex p-1 bg-muted rounded-lg">
             <button
               onClick={() => setView('calendar')}
               aria-pressed={view === 'calendar'}
-              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium transition-all ${
+              aria-label="Vista calendario"
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 h-9 sm:h-8 pointer-coarse:min-h-[44px] rounded-md text-sm font-medium transition-all ${
                 view === 'calendar'
                   ? 'bg-card text-foreground shadow-soft'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <CalendarDays className="w-4 h-4" strokeWidth={1.85} />
-              Calendario
+              <CalendarDays className="w-4 h-4 flex-shrink-0" strokeWidth={1.85} />
+              <span className="hidden sm:inline">Calendario</span>
             </button>
             <button
               onClick={() => setView('list')}
               aria-pressed={view === 'list'}
-              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium transition-all ${
+              aria-label="Vista lista"
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 h-9 sm:h-8 pointer-coarse:min-h-[44px] rounded-md text-sm font-medium transition-all ${
                 view === 'list'
                   ? 'bg-card text-foreground shadow-soft'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <List className="w-4 h-4" strokeWidth={1.85} />
-              Lista
+              <List className="w-4 h-4 flex-shrink-0" strokeWidth={1.85} />
+              <span className="hidden sm:inline">Lista</span>
             </button>
             <button
               onClick={() => setView('weekly')}
               aria-pressed={view === 'weekly'}
-              className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-md text-sm font-medium transition-all ${
+              aria-label="Vista settimanale"
+              className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 h-9 sm:h-8 pointer-coarse:min-h-[44px] rounded-md text-sm font-medium transition-all ${
                 view === 'weekly'
                   ? 'bg-card text-foreground shadow-soft'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <CalendarDays className="w-4 h-4" strokeWidth={1.85} />
-              Settimanale
+              <CalendarDays className="w-4 h-4 flex-shrink-0" strokeWidth={1.85} />
+              <span className="hidden sm:inline">Settimanale</span>
             </button>
           </div>
 
@@ -583,9 +589,31 @@ export default function SessionsPage() {
             : ''
         }
         size="md"
+        footer={
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setDeleting(null)
+                setDeleteScope('one')
+              }}
+              disabled={deleteScopedMutation.isPending || deleteMutation.isPending}
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              className="w-full sm:w-auto"
+              onClick={handleDelete}
+              loading={deleteScopedMutation.isPending || deleteMutation.isPending}
+            >
+              Elimina
+            </Button>
+          </div>
+        }
       >
-        <div className="space-y-4">
-          <div className="space-y-2">
+        <div className="space-y-2">
             <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:border-foreground/20 transition-colors">
               <input
                 type="radio"
@@ -633,27 +661,6 @@ export default function SessionsPage() {
                 </p>
               </div>
             </label>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDeleting(null)
-                setDeleteScope('one')
-              }}
-              disabled={deleteScopedMutation.isPending || deleteMutation.isPending}
-            >
-              Annulla
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              loading={deleteScopedMutation.isPending || deleteMutation.isPending}
-            >
-              Elimina
-            </Button>
-          </div>
         </div>
       </Modal>
 
@@ -664,9 +671,20 @@ export default function SessionsPage() {
         title="Modifica seduta ricorrente"
         description="A quali sedute vuoi applicare le modifiche?"
         size="md"
+        footer={
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => setPendingScopedData(null)}
+              disabled={updateScopedMutation.isPending}
+            >
+              Annulla
+            </Button>
+          </div>
+        }
       >
-        <div className="space-y-4">
-          <div className="space-y-2">
+        <div className="space-y-2">
             <button
               type="button"
               onClick={() => applyScopedUpdate('one')}
@@ -695,16 +713,6 @@ export default function SessionsPage() {
                 </p>
               </div>
             </button>
-          </div>
-          <div className="flex justify-end pt-3 border-t border-border">
-            <Button
-              variant="outline"
-              onClick={() => setPendingScopedData(null)}
-              disabled={updateScopedMutation.isPending}
-            >
-              Annulla
-            </Button>
-          </div>
         </div>
       </Modal>
 
@@ -722,6 +730,55 @@ export default function SessionsPage() {
             : ''
         }
         size="md"
+        footer={
+          payingSession && (
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  setPayingSession(null)
+                  setPaymentAmount('')
+                }}
+                disabled={createPaymentMutation.isPending}
+              >
+                Annulla
+              </Button>
+              <Button
+                className="w-full sm:w-auto"
+                onClick={async () => {
+                  try {
+                    const suggested = computeSuggestedAmount(payingSession)
+                    const amount =
+                      paymentAmount && paymentAmount.trim()
+                        ? Number(paymentAmount)
+                        : suggested
+
+                    await createPaymentMutation.mutateAsync({
+                      patient_id: payingSession.patient_id,
+                      group_id: payingSession.group_id ?? null,
+                      session_id: payingSession.id,
+                      amount,
+                      payment_date: new Date().toISOString().split('T')[0],
+                      payment_method: 'other',
+                      notes: `Pagamento rapido da seduta ${payingSession.service_types?.name}`,
+                    })
+                    toast.success('Pagamento registrato')
+                    setPayingSession(null)
+                    setPaymentAmount('')
+                  } catch (error) {
+                    toast.error('Errore nel salvataggio', {
+                      description: error instanceof Error ? error.message : 'Riprova',
+                    })
+                  }
+                }}
+                loading={createPaymentMutation.isPending}
+              >
+                Registra pagamento
+              </Button>
+            </div>
+          )
+        }
       >
         {payingSession && (() => {
           const sessionPrice = Number(payingSession.service_types?.price || 0)
@@ -778,49 +835,6 @@ export default function SessionsPage() {
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
             />
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-border">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPayingSession(null)
-                  setPaymentAmount('')
-                }}
-                disabled={createPaymentMutation.isPending}
-              >
-                Annulla
-              </Button>
-              <Button
-                onClick={async () => {
-                  try {
-                    const amount =
-                      paymentAmount && paymentAmount.trim()
-                        ? Number(paymentAmount)
-                        : suggested
-
-                    await createPaymentMutation.mutateAsync({
-                      patient_id: payingSession.patient_id,
-                      group_id: payingSession.group_id ?? null,
-                      session_id: payingSession.id,
-                      amount,
-                      payment_date: new Date().toISOString().split('T')[0],
-                      payment_method: 'other',
-                      notes: `Pagamento rapido da seduta ${payingSession.service_types?.name}`,
-                    })
-                    toast.success('Pagamento registrato')
-                    setPayingSession(null)
-                    setPaymentAmount('')
-                  } catch (error) {
-                    toast.error('Errore nel salvataggio', {
-                      description: error instanceof Error ? error.message : 'Riprova',
-                    })
-                  }
-                }}
-                loading={createPaymentMutation.isPending}
-              >
-                Registra pagamento
-              </Button>
-            </div>
           </div>
           )
         })()}

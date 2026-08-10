@@ -11,7 +11,9 @@ export default function Layout() {
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
-      <div className="flex h-screen bg-background text-foreground">
+      {/* h-[100dvh] (not h-screen/100vh) so mobile browser chrome that
+          resizes the viewport doesn't leave a stale gap or clip content. */}
+      <div className="flex h-[100dvh] bg-background text-foreground">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <Header onMenuClick={() => setSidebarOpen(true)} />

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import {
   startOfWeek,
   endOfWeek,
@@ -7,6 +7,7 @@ import {
   addMinutes,
   getHours,
   getMinutes,
+  isSameDay,
 } from 'date-fns'
 import { it } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -42,7 +43,17 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i) // 0-23
 const WORKING_HOURS_START = 8 // 08:00
 const WORKING_HOURS_END = 21 // 21:00
 const HOUR_HEIGHT_DESKTOP = 80 // px per hour on desktop
-const HOUR_HEIGHT_MOBILE = 40 // px per hour on mobile/tablet
+// Mobile hour height: tall enough that a 60-minute session block (56px) is
+// comfortably tappable, well above the ~44px touch-target baseline.
+const HOUR_HEIGHT_MOBILE = 56
+// Each day gets its own scrollable column on mobile instead of being
+// squeezed to a 1/7th share of the screen — wide enough to read a name and
+// tap a session without missing.
+const MOBILE_DAY_COL_WIDTH = 124
+// A session shorter than this many px doesn't have room to also print the
+// service name — time + patient name still fit at any height because the
+// block enforces a minimum height below.
+const MOBILE_SERVICE_NAME_MIN_HEIGHT = 64
 
 export default function WeeklyTimelineView({
   currentDate,
@@ -53,11 +64,12 @@ export default function WeeklyTimelineView({
   const isMobile = useIsMobile()
   const balanceMap = usePatientBalanceMap()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const dayColRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const hourHeight = isMobile ? HOUR_HEIGHT_MOBILE : HOUR_HEIGHT_DESKTOP
-  // Mobile fits all 7 days inside the viewport, so we render only working
-  // hours (8–21) without vertical scroll. Desktop keeps the full 24-hour
-  // grid scrollable so the user can drag sessions to off-hours.
+  // Mobile fits the working hours in a tall scrollable strip rather than a
+  // cramped 24h grid; desktop keeps the full 24-hour grid scrollable so the
+  // user can drag sessions to off-hours.
   const visibleHours = isMobile
     ? HOURS.filter((h) => h >= WORKING_HOURS_START && h <= WORKING_HOURS_END)
     : HOURS
@@ -69,12 +81,45 @@ export default function WeeklyTimelineView({
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
 
+  // Mobile day-chip navigation: which day the horizontal strip is scrolled to.
+  const [selectedDayKey, setSelectedDayKey] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+
+  const hoursColWidth = isMobile ? 36 : 56
+
+  const scrollToDay = useCallback(
+    (dayKey: string, behavior: ScrollBehavior = 'smooth') => {
+      const container = scrollRef.current
+      const target = dayColRefs.current[dayKey]
+      if (!container || !target) return
+      // Offset by the sticky hour column so it doesn't cover the day's
+      // first minutes once scrolled into place.
+      const left = Math.max(0, target.offsetLeft - hoursColWidth)
+      container.scrollTo({ left, behavior })
+    },
+    [hoursColWidth]
+  )
+
   // On desktop, pre-scroll to working hours on mount
   useEffect(() => {
     if (!isMobile && scrollRef.current) {
       scrollRef.current.scrollTop = WORKING_HOURS_START * hourHeight
     }
   }, [hourHeight, isMobile])
+
+  // On mobile, whenever the visible week changes, snap the horizontal strip
+  // to today (or the first day of the week if today isn't in it) so the
+  // user doesn't land on Monday every time they open the agenda.
+  useEffect(() => {
+    if (!isMobile) return
+    const today = new Date()
+    const defaultDay = days.find((d) => isSameDay(d, today)) ?? days[0]
+    const defaultKey = format(defaultDay, 'yyyy-MM-dd')
+    setSelectedDayKey(defaultKey)
+    // Defer to next frame so refs from this render are attached.
+    const raf = requestAnimationFrame(() => scrollToDay(defaultKey, 'auto'))
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, weekStart.getTime()])
 
   // Group sessions by day and calculate their position/height
   const getSessionsForDay = (day: Date) => {
@@ -92,18 +137,18 @@ export default function WeeklyTimelineView({
     return {
       top: `${top}px`,
       height: `${height}px`,
-      minHeight: isMobile ? '32px' : '40px',
+      minHeight: isMobile ? '44px' : '40px',
+      rawHeight: height,
     }
   }
-
-  const hoursColWidth = isMobile ? 36 : 56
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
+          aria-label="Settimana precedente"
           onClick={() => onDateChange(new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000))}
         >
           <ChevronLeft className="w-4 h-4" />
@@ -114,11 +159,46 @@ export default function WeeklyTimelineView({
         </h3>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
+          aria-label="Settimana successiva"
           onClick={() => onDateChange(new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000))}
         >
           <ChevronRight className="w-4 h-4" />
         </Button>
+      </div>
+
+      {/* Compact day chips — the primary way to navigate the week on
+          mobile, since 7 columns no longer fit side by side. Tapping a
+          chip scrolls the strip below to that day. */}
+      <div className="grid grid-cols-7 gap-1 md:hidden">
+        {days.map((day) => {
+          const dayKey = format(day, 'yyyy-MM-dd')
+          const isToday = isSameDay(day, new Date())
+          const isSelected = dayKey === selectedDayKey
+          return (
+            <button
+              key={dayKey}
+              type="button"
+              onClick={() => {
+                setSelectedDayKey(dayKey)
+                scrollToDay(dayKey)
+              }}
+              aria-pressed={isSelected}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 pointer-coarse:min-h-[44px] transition-colors ${
+                isSelected
+                  ? 'bg-primary text-primary-foreground'
+                  : isToday
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-secondary/60'
+              }`}
+            >
+              <span className="text-[10px] uppercase tracking-wide leading-none opacity-80">
+                {format(day, 'EEEEE', { locale: it })}
+              </span>
+              <span className="text-sm font-semibold leading-tight">{format(day, 'd')}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Single scroll container — hours and days move together. Sticky
@@ -128,28 +208,32 @@ export default function WeeklyTimelineView({
         ref={scrollRef}
         className="overflow-auto border border-border rounded-lg bg-card"
         style={{
-          // On mobile we render only working hours so vertical scroll is
-          // typically unnecessary; cap height anyway to avoid overflowing
-          // the viewport on very short screens.
-          maxHeight: isMobile ? 'calc(100vh - 220px)' : '70vh',
+          // Mobile now scrolls both ways (day strip + working hours), so
+          // cap height to leave room for the chips row and page chrome
+          // without overflowing the viewport on short screens.
+          maxHeight: isMobile ? 'calc(100vh - 280px)' : '70vh',
         }}
       >
         <div
           className="grid"
-          style={{
-            gridTemplateColumns: `${hoursColWidth}px repeat(7, minmax(${
-              isMobile ? '0' : '120px'
-            }, 1fr))`,
-            width: '100%',
-          }}
+          style={
+            isMobile
+              ? {
+                  gridTemplateColumns: `${hoursColWidth}px repeat(7, ${MOBILE_DAY_COL_WIDTH}px)`,
+                  width: 'max-content',
+                }
+              : {
+                  gridTemplateColumns: `${hoursColWidth}px repeat(7, minmax(120px, 1fr))`,
+                  width: '100%',
+                }
+          }
         >
           {/* Top-left corner (empty, masks where sticky header meets sticky col) */}
           <div className="sticky top-0 left-0 z-30 h-10 bg-card border-b border-r border-border" />
 
           {/* Day headers (sticky top) */}
           {days.map((day) => {
-            const isToday =
-              format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+            const isToday = isSameDay(day, new Date())
             return (
               <div
                 key={day.toISOString()}
@@ -189,13 +273,16 @@ export default function WeeklyTimelineView({
           </div>
 
           {days.map((day) => {
+            const dayKey = format(day, 'yyyy-MM-dd')
             const daySessions = getSessionsForDay(day)
-            const isToday =
-              format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
+            const isToday = isSameDay(day, new Date())
 
             return (
               <div
                 key={day.toISOString()}
+                ref={(el) => {
+                  dayColRefs.current[dayKey] = el
+                }}
                 className={`relative border-l border-border ${
                   isToday ? 'bg-primary/5' : ''
                 }`}
@@ -224,15 +311,17 @@ export default function WeeklyTimelineView({
                   const showBalDot = Math.abs(bal) >= 0.01
                   const inactive =
                     session.status === 'cancelled' || session.status === 'no_show'
+                  const { rawHeight, ...blockStyle } = getSessionStyle(session)
+                  const showServiceName = !isMobile || rawHeight >= MOBILE_SERVICE_NAME_MIN_HEIGHT
                   return (
                     <button
                       key={session.id}
                       onClick={() => onSessionClick(session)}
-                      className={`absolute left-0.5 right-0.5 px-1 py-0.5 sm:p-2 rounded border text-left overflow-hidden transition-all hover:shadow-md cursor-pointer ${
+                      className={`absolute left-0.5 right-0.5 px-1.5 py-1 sm:p-2 rounded border text-left overflow-hidden transition-all hover:shadow-md cursor-pointer ${
                         inactive ? 'opacity-50' : ''
                       }`}
                       style={{
-                        ...getSessionStyle(session),
+                        ...blockStyle,
                         ...color.pillStyle,
                         borderColor: color.hex,
                       }}
@@ -252,10 +341,7 @@ export default function WeeklyTimelineView({
                       }${inactive ? ` · ${SESSION_STATUS_LABELS[session.status]}` : ''}`}
                     >
                       <div className="text-[10px] sm:text-xs font-semibold leading-tight truncate">
-                        {format(new Date(session.scheduled_at), 'HH:mm')}
-                        {!isMobile && (
-                          <>—{format(end, 'HH:mm')}</>
-                        )}
+                        {format(new Date(session.scheduled_at), 'HH:mm')}—{format(end, 'HH:mm')}
                       </div>
                       <div className="text-[10px] sm:text-2xs opacity-90 truncate leading-tight flex items-center gap-1">
                         <span className={`truncate ${inactive ? 'line-through' : ''}`}>
@@ -269,7 +355,7 @@ export default function WeeklyTimelineView({
                           />
                         )}
                       </div>
-                      {!isMobile && (
+                      {showServiceName && (
                         <div className="text-2xs opacity-75 truncate leading-tight">
                           {session.service_types?.name}
                         </div>
@@ -277,8 +363,6 @@ export default function WeeklyTimelineView({
                     </button>
                   )
                 })}
-                {/* isToday flag is already applied via background tint */}
-                {isToday && null}
               </div>
             )
           })}

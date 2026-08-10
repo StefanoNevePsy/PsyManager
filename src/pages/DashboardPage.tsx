@@ -486,18 +486,20 @@ export default function DashboardPage() {
       {/* Arrears reminder — pain point hook from PRODUCT.md */}
       {data && data.recentPayments.length === 0 && data.activePatients > 0 && (
         <Card variant="quiet" className="border-warning/20 bg-warning-soft/30">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" strokeWidth={2} />
-            <div className="min-w-0 flex-1">
-              <h3 className="font-medium text-sm text-foreground">
-                Tieni traccia degli arretrati
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Registra i pagamenti per mantenere chiari saldi e crediti dei tuoi pazienti.
-              </p>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" strokeWidth={2} />
+              <div className="min-w-0 flex-1">
+                <h3 className="font-medium text-sm text-foreground">
+                  Tieni traccia degli arretrati
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Registra i pagamenti per mantenere chiari saldi e crediti dei tuoi pazienti.
+                </p>
+              </div>
             </div>
-            <Link to="/payments">
-              <Button variant="outline" size="sm">
+            <Link to="/payments" className="sm:flex-shrink-0">
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">
                 Vai ai pagamenti
               </Button>
             </Link>

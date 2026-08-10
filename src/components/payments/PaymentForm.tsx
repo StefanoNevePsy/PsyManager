@@ -134,11 +134,11 @@ export default function PaymentForm({
         error={errors.notes?.message}
       />
 
-      <div className="flex justify-end gap-2 pt-4 border-t border-border">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+      <div className="sticky bottom-0 z-10 -mx-1 px-1 pt-3 pb-1 bg-card border-t border-border grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={loading} className="w-full sm:w-auto">
           Annulla
         </Button>
-        <Button type="submit" loading={loading}>
+        <Button type="submit" loading={loading} className="w-full sm:w-auto">
           {initialData ? 'Aggiorna' : 'Registra'}
         </Button>
       </div>

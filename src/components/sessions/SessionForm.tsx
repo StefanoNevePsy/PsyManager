@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { startOfDay, endOfDay, format } from 'date-fns'
-import { Repeat, ChevronDown, Info, DollarSign, NotebookPen, Users, AlertTriangle } from 'lucide-react'
+import { Repeat, ChevronDown, Info, DollarSign, NotebookPen, Users, AlertTriangle, Trash2 } from 'lucide-react'
 import { sessionSchema, SessionFormData } from '@/lib/schemas'
 import { Button, Input, Select, Textarea } from '@/components/ui'
 import { usePatients } from '@/hooks/usePatients'
@@ -555,49 +555,58 @@ export default function SessionForm({
         </div>
       )}
 
-      <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2 pt-4 border-t border-border">
-        <div className="flex gap-2">
-          {initialData && onDelete && (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={onDelete}
-              disabled={loading}
-              className="w-full sm:w-auto"
-            >
-              Elimina
-            </Button>
-          )}
-        </div>
-        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:flex-wrap">
-          {initialData && onAddToDiary && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onAddToDiary}
-              disabled={loading}
-              className="w-full sm:w-auto"
-              title="Aggiungi al diario clinico"
-            >
-              <NotebookPen className="w-4 h-4" />
-              <span className="hidden sm:inline">Aggiungi al diario</span>
-            </Button>
-          )}
-          {initialData && onPay && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onPay}
-              disabled={loading}
-              className="w-full sm:w-auto"
-              title="Registra pagamento"
-            >
-              <DollarSign className="w-4 h-4" />
-              <span className="hidden sm:inline">Pagamento</span>
-            </Button>
-          )}
+      {/* Sticky action bar: the form is long, and on a phone the primary
+          action must stay reachable without scrolling to the bottom.
+          Secondary actions share one compact row instead of stacking
+          full-width, which pushed everything off screen. */}
+      <div className="sticky bottom-0 z-10 -mx-1 px-1 pt-3 pb-1 bg-card border-t border-border space-y-2">
+        {initialData && (onDelete || onAddToDiary || onPay) && (
+          <div className="flex items-center gap-2">
+            {onDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onDelete}
+                disabled={loading}
+                className="text-destructive hover:bg-destructive/10"
+                title="Elimina seduta"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Elimina</span>
+              </Button>
+            )}
+            <div className="flex-1" />
+            {onAddToDiary && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onAddToDiary}
+                disabled={loading}
+                title="Aggiungi al diario clinico"
+              >
+                <NotebookPen className="w-4 h-4" />
+                <span className="hidden sm:inline">Diario</span>
+              </Button>
+            )}
+            {onPay && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onPay}
+                disabled={loading}
+                title="Registra pagamento"
+              >
+                <DollarSign className="w-4 h-4" />
+                <span className="hidden sm:inline">Pagamento</span>
+              </Button>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
           <Button
             type="button"
             variant="outline"
